@@ -7,7 +7,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./testing": "./src/testing.ts"
+    "./testing": "./src/testing.ts",
+    "./generated": "./src/generated.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -1,0 +1,12 @@
+import { createRediscoverClient } from '@rediscover/api-client'
+
+const url = import.meta.env.VITE_SUPABASE_URL
+const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+
+if (!url || !publishableKey) {
+  throw new Error(
+    'Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY. Copy apps/web/.env.example to apps/web/.env.local.',
+  )
+}
+
+export const supabase = createRediscoverClient(url, publishableKey)

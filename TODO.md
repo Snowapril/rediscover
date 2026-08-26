@@ -8,6 +8,7 @@
 - Register the Kakao application and its redirect URI
 - Enable Google and Kakao sign in once provider credentials exist
 - Register a Chrome Web Store developer account
+- Upgrade Node to 22.22+ so react-router 8 can be used
 - M1: web app shell with email and password sign in
 - M1: collection tree CRUD
 - M1: item list, item detail panel, property editing

@@ -81,3 +81,18 @@ create policy reminders_update on reminders for update to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 create policy reminders_delete on reminders for delete to authenticated
   using (user_id = (select auth.uid()));
+
+
+-- Table privileges. Row level security narrows which rows a user reaches, but
+-- only after the role holds a privilege on the table at all, and a table created
+-- by a migration starts with none. TRUNCATE is deliberately withheld: it is not
+-- subject to row level security, so granting it would let any signed-in user
+-- empty a table.
+
+grant usage on schema public to anon, authenticated, service_role;
+
+grant select, insert, update, delete on all tables in schema public
+  to authenticated, service_role;
+
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to authenticated, service_role;

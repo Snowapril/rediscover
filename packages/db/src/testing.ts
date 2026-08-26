@@ -7,9 +7,9 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  * @brief The parts of a Supabase database the migrations depend on but do not create.
  * @details Mirrors what a hosted project already provides: the `auth` schema with
  *   its users table and uid() helper, and the anon/authenticated/service_role
- *   roles that carry table privileges. Default privileges are granted before the
- *   migrations run so tables created by them are reachable by `authenticated`,
- *   matching hosted behaviour.
+ *   roles. It deliberately grants no privileges on public tables — a hosted
+ *   project does not either, so the migrations must grant them and a missing
+ *   grant shows up as a failing test rather than in production.
  */
 const SUPABASE_PRELUDE = `
 create schema if not exists auth;
@@ -31,15 +31,7 @@ create role anon nologin;
 create role authenticated nologin;
 create role service_role nologin bypassrls;
 
-grant usage on schema public to anon, authenticated, service_role;
 grant usage on schema auth to anon, authenticated, service_role;
-
-alter default privileges in schema public
-  grant all on tables to anon, authenticated, service_role;
-alter default privileges in schema public
-  grant all on sequences to anon, authenticated, service_role;
-alter default privileges in schema public
-  grant execute on functions to anon, authenticated, service_role;
 `
 
 export interface TestDb {

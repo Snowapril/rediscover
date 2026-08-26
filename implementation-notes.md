@@ -66,3 +66,16 @@ stack supports with no confirmation step.
 Kakao applications is prerequisite work that does not block the rest of M1, and
 the application only ever sees a Supabase Auth session, so turning a provider on
 later changes the sign in screen and nothing else.
+
+### An already-merged migration was edited rather than superseded
+
+**Planned:** treat migrations as immutable once merged.
+**Done:** `20260826180000_init.sql` was edited in place to change the items
+foreign key from `on delete set null` to `on delete set null (collection_id)`.
+**Why:** the unqualified form nulls *every* column of the composite key,
+including `user_id`, which is NOT NULL — so deleting a folder that held any item
+failed outright. No database anywhere had this migration applied except throwaway
+ones: CI builds from scratch each run, and a developer's local stack is restored
+with `npm run db:reset`. Adding a corrective migration would have left permanent
+noise for a same-day mistake. Once a hosted project exists this option is gone
+and a new migration becomes the only correct route.

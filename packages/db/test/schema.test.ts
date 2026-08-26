@@ -90,6 +90,53 @@ describe('constraints', () => {
     ).rejects.toThrow()
   })
 
+  it('detaches an item to the inbox when its folder is deleted', async () => {
+    const folder = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Doomed') returning id`,
+      [alice],
+    )
+    const folderId = folder.rows[0]!.id
+    const itemId = await insertItem(alice, 'https://example.com/detach-me', folderId)
+
+    await expect(
+      db.pg.query('delete from collections where id = $1', [folderId]),
+    ).resolves.toBeTruthy()
+
+    const result = await db.pg.query<{ collection_id: string | null; user_id: string }>(
+      'select collection_id, user_id from items where id = $1',
+      [itemId],
+    )
+    expect(result.rows[0]!.collection_id).toBeNull()
+    expect(result.rows[0]!.user_id).toBe(alice)
+  })
+
+  it('detaches items when an ancestor folder is deleted', async () => {
+    const parent = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Parent') returning id`,
+      [alice],
+    )
+    const parentId = parent.rows[0]!.id
+    const child = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, parent_id, name) values ($1, $2, 'Child') returning id`,
+      [alice, parentId],
+    )
+    const itemId = await insertItem(alice, 'https://example.com/nested', child.rows[0]!.id)
+
+    await db.pg.query('delete from collections where id = $1', [parentId])
+
+    const folders = await db.pg.query<{ count: number }>(
+      'select count(*)::int as count from collections where id = any($1)',
+      [[parentId, child.rows[0]!.id]],
+    )
+    expect(folders.rows[0]!.count).toBe(0)
+
+    const item = await db.pg.query<{ collection_id: string | null }>(
+      'select collection_id from items where id = $1',
+      [itemId],
+    )
+    expect(item.rows[0]!.collection_id).toBeNull()
+  })
+
   it("refuses to file an item into another user's folder", async () => {
     const folder = await db.pg.query<{ id: string }>(
       `insert into collections (user_id, name) values ($1, 'Bob private') returning id`,

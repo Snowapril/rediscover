@@ -1,0 +1,168 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createTestDb, type TestDb } from '../src/testing.js'
+
+let db: TestDb
+let alice: string
+let bob: string
+
+beforeAll(async () => {
+  db = await createTestDb()
+  alice = await db.createUser('alice@example.com')
+  bob = await db.createUser('bob@example.com')
+}, 60_000)
+
+afterAll(async () => {
+  await db.close()
+})
+
+async function insertItem(userId: string, url: string, collectionId: string | null = null) {
+  const result = await db.pg.query<{ id: string }>(
+    `insert into items (user_id, collection_id, url, canonical_url, domain)
+     values ($1, $2, $3, $3, 'example.com') returning id`,
+    [userId, collectionId, url],
+  )
+  return result.rows[0]!.id
+}
+
+describe('migrations', () => {
+  it('creates a profile for every auth user', async () => {
+    const result = await db.pg.query<{ count: number }>(
+      'select count(*)::int as count from profiles where id = any($1)',
+      [[alice, bob]],
+    )
+    expect(result.rows[0]!.count).toBe(2)
+  })
+
+  it('enables row level security on every user-owned table', async () => {
+    const result = await db.pg.query<{ tablename: string }>(
+      `select tablename from pg_tables
+       where schemaname = 'public' and rowsecurity = false`,
+    )
+    expect(result.rows).toEqual([])
+  })
+})
+
+describe('constraints', () => {
+  it('rejects a second live scrap of the same URL by the same user', async () => {
+    await insertItem(alice, 'https://example.com/dup')
+    await expect(insertItem(alice, 'https://example.com/dup')).rejects.toThrow()
+  })
+
+  it('lets two users scrap the same URL', async () => {
+    await insertItem(bob, 'https://example.com/dup')
+    const result = await db.pg.query<{ count: number }>(
+      `select count(*)::int as count from items where canonical_url = 'https://example.com/dup'`,
+    )
+    expect(result.rows[0]!.count).toBe(2)
+  })
+
+  it('lets a trashed URL be scrapped again', async () => {
+    const id = await insertItem(alice, 'https://example.com/trash-me')
+    await db.pg.query('update items set deleted_at = now() where id = $1', [id])
+    await expect(insertItem(alice, 'https://example.com/trash-me')).resolves.toBeTruthy()
+  })
+
+  it('rejects an edited_fields entry that is not a known property', async () => {
+    const id = await insertItem(alice, 'https://example.com/edited')
+    await expect(
+      db.pg.query(`update items set edited_fields = '{"title","nope"}' where id = $1`, [id]),
+    ).rejects.toThrow()
+    await expect(
+      db.pg.query(`update items set edited_fields = '{"title","excerpt"}' where id = $1`, [id]),
+    ).resolves.toBeTruthy()
+  })
+
+  it('rejects a folder that would become its own ancestor', async () => {
+    const parent = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Reading') returning id`,
+      [alice],
+    )
+    const parentId = parent.rows[0]!.id
+    const child = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, parent_id, name) values ($1, $2, 'Later') returning id`,
+      [alice, parentId],
+    )
+    await expect(
+      db.pg.query('update collections set parent_id = $1 where id = $2', [
+        child.rows[0]!.id,
+        parentId,
+      ]),
+    ).rejects.toThrow()
+  })
+
+  it("refuses to file an item into another user's folder", async () => {
+    const folder = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Bob private') returning id`,
+      [bob],
+    )
+    await expect(
+      insertItem(alice, 'https://example.com/cross-owner', folder.rows[0]!.id),
+    ).rejects.toThrow()
+  })
+})
+
+describe('row level security', () => {
+  it("hides one user's items from another", async () => {
+    await insertItem(alice, 'https://example.com/alice-secret')
+    const visible = await db.asUser(bob, async (pg) => {
+      const result = await pg.query<{ canonical_url: string }>('select canonical_url from items')
+      return result.rows.map((row) => row.canonical_url)
+    })
+    expect(visible).not.toContain('https://example.com/alice-secret')
+  })
+
+  it('shows a user their own items', async () => {
+    const visible = await db.asUser(alice, async (pg) => {
+      const result = await pg.query<{ canonical_url: string }>('select canonical_url from items')
+      return result.rows.map((row) => row.canonical_url)
+    })
+    expect(visible).toContain('https://example.com/alice-secret')
+  })
+
+  it('refuses an insert that claims another user as owner', async () => {
+    await expect(
+      db.asUser(bob, (pg) =>
+        pg.query(
+          `insert into items (user_id, url, canonical_url, domain)
+           values ($1, 'https://example.com/forged', 'https://example.com/forged', 'example.com')`,
+          [alice],
+        ),
+      ),
+    ).rejects.toThrow()
+  })
+
+  it("refuses an update to another user's item", async () => {
+    const result = await db.asUser(bob, (pg) =>
+      pg.query(`update items set is_important = true where canonical_url = 'https://example.com/alice-secret'`),
+    )
+    expect(result.affectedRows).toBe(0)
+  })
+
+  it("refuses a delete of another user's item", async () => {
+    const result = await db.asUser(bob, (pg) =>
+      pg.query(`delete from items where canonical_url = 'https://example.com/alice-secret'`),
+    )
+    expect(result.affectedRows).toBe(0)
+  })
+
+  it('lets every user read built-in scripts but not write them', async () => {
+    await db.pg.query(
+      `insert into scripts (user_id, name, kind, source, is_builtin)
+       values (null, 'Newest first', 'sort', 'export function key(i){return -i.createdAt}', true)`,
+    )
+    const readable = await db.asUser(bob, async (pg) => {
+      const result = await pg.query<{ name: string }>('select name from scripts where is_builtin')
+      return result.rows.map((row) => row.name)
+    })
+    expect(readable).toEqual(['Newest first'])
+
+    await expect(
+      db.asUser(bob, (pg) =>
+        pg.query(
+          `insert into scripts (user_id, name, kind, source, is_builtin)
+           values (null, 'Fake builtin', 'sort', 'export function key(){return 0}', true)`,
+        ),
+      ),
+    ).rejects.toThrow()
+  })
+})

@@ -55,3 +55,14 @@ usable from the browser, the extension and React Native.
 **Why:** the first thing that needs runtime validation is the metadata extractor,
 which arrives in M1. Adding schemas with no caller would be guesswork about their
 shape.
+
+### Social sign in deferred to a later milestone
+
+**Planned:** Google, Apple and Kakao sign in during M1.
+**Done:** the provider blocks sit in `supabase/config.toml` with `enabled =
+false`; local development signs in with email and password, which the local
+stack supports with no confirmation step.
+**Why:** the user chose to postpone account linking. Registering the Google and
+Kakao applications is prerequisite work that does not block the rest of M1, and
+the application only ever sees a Supabase Auth session, so turning a provider on
+later changes the sign in screen and nothing else.

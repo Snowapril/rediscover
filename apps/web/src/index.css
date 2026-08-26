@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-canvas: oklch(99% 0.004 90);
+  --color-surface: oklch(100% 0 0);
+  --color-line: oklch(91% 0.006 90);
+  --color-ink: oklch(24% 0.012 60);
+  --color-muted: oklch(52% 0.012 60);
+  --color-accent: oklch(56% 0.15 32);
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-canvas: oklch(19% 0.008 60);
+    --color-surface: oklch(23% 0.009 60);
+    --color-line: oklch(31% 0.01 60);
+    --color-ink: oklch(94% 0.005 90);
+    --color-muted: oklch(68% 0.012 70);
+    --color-accent: oklch(70% 0.14 40);
+  }
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}

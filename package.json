@@ -1,0 +1,34 @@
+{
+  "name": "rediscover",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Scrap links, organize them, and actually come back to read them.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "eslint .",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:types": "supabase gen types typescript --local > packages/db/src/generated.ts"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.3",
+    "eslint": "9.28.0",
+    "supabase": "2.115.0",
+    "turbo": "2.5.4",
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.33.1",
+    "vitest": "3.1.3"
+  }
+}

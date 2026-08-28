@@ -13,8 +13,15 @@ export function HomePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const userId = session?.user.id
+
+  // Deleting a folder can remove the one being viewed, or an ancestor of it, so
+  // the selection is checked against the folders that actually exist rather than
+  // trusted. Only once they have loaded — until then an unknown id is not yet
+  // known to be missing.
+  const loaded = collections.data !== undefined
   const selected = collections.data?.find((collection) => collection.id === selectedId)
-  const collectionName = selectedId === null ? 'Inbox' : (selected?.name ?? 'Folder')
+  const viewingId = loaded && selected === undefined ? null : selectedId
+  const collectionName = viewingId === null ? 'Inbox' : (selected?.name ?? 'Folder')
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -40,7 +47,7 @@ export function HomePage() {
             <CollectionTree
               userId={userId}
               collections={collections.data ?? []}
-              selectedId={selectedId}
+              selectedId={viewingId}
               onSelect={setSelectedId}
             />
           )}
@@ -48,7 +55,12 @@ export function HomePage() {
 
         <main className="min-w-0 flex-1">
           {userId !== undefined && (
-            <ItemList userId={userId} collectionId={selectedId} collectionName={collectionName} />
+            <ItemList
+              userId={userId}
+              collectionId={viewingId}
+              collectionName={collectionName}
+              onOpenCollection={setSelectedId}
+            />
           )}
         </main>
       </div>

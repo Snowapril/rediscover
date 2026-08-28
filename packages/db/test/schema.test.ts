@@ -90,7 +90,7 @@ describe('constraints', () => {
     ).rejects.toThrow()
   })
 
-  it('detaches an item to the inbox when its folder is deleted', async () => {
+  it('can delete a folder that still holds scraps', async () => {
     const folder = await db.pg.query<{ id: string }>(
       `insert into collections (user_id, name) values ($1, 'Doomed') returning id`,
       [alice],
@@ -102,15 +102,15 @@ describe('constraints', () => {
       db.pg.query('delete from collections where id = $1', [folderId]),
     ).resolves.toBeTruthy()
 
-    const result = await db.pg.query<{ collection_id: string | null; user_id: string }>(
-      'select collection_id, user_id from items where id = $1',
+    const result = await db.pg.query<{ deleted_at: string | null; user_id: string }>(
+      'select deleted_at, user_id from items where id = $1',
       [itemId],
     )
-    expect(result.rows[0]!.collection_id).toBeNull()
+    expect(result.rows[0]!.deleted_at).not.toBeNull()
     expect(result.rows[0]!.user_id).toBe(alice)
   })
 
-  it('detaches items when an ancestor folder is deleted', async () => {
+  it('trashes the scraps of every folder beneath the one deleted', async () => {
     const parent = await db.pg.query<{ id: string }>(
       `insert into collections (user_id, name) values ($1, 'Parent') returning id`,
       [alice],
@@ -120,7 +120,8 @@ describe('constraints', () => {
       `insert into collections (user_id, parent_id, name) values ($1, $2, 'Child') returning id`,
       [alice, parentId],
     )
-    const itemId = await insertItem(alice, 'https://example.com/nested', child.rows[0]!.id)
+    const inParent = await insertItem(alice, 'https://example.com/in-parent', parentId)
+    const inChild = await insertItem(alice, 'https://example.com/in-child', child.rows[0]!.id)
 
     await db.pg.query('delete from collections where id = $1', [parentId])
 
@@ -130,11 +131,33 @@ describe('constraints', () => {
     )
     expect(folders.rows[0]!.count).toBe(0)
 
-    const item = await db.pg.query<{ collection_id: string | null }>(
-      'select collection_id from items where id = $1',
-      [itemId],
+    const live = await db.pg.query<{ count: number }>(
+      'select count(*)::int as count from items where id = any($1) and deleted_at is null',
+      [[inParent, inChild]],
     )
-    expect(item.rows[0]!.collection_id).toBeNull()
+    expect(live.rows[0]!.count).toBe(0)
+  })
+
+  it('leaves scraps in sibling folders alone', async () => {
+    const keep = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Keep') returning id`,
+      [alice],
+    )
+    const drop = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Drop') returning id`,
+      [alice],
+    )
+    const survivor = await insertItem(alice, 'https://example.com/survivor', keep.rows[0]!.id)
+    await insertItem(alice, 'https://example.com/doomed', drop.rows[0]!.id)
+
+    await db.pg.query('delete from collections where id = $1', [drop.rows[0]!.id])
+
+    const result = await db.pg.query<{ deleted_at: string | null; collection_id: string }>(
+      'select deleted_at, collection_id from items where id = $1',
+      [survivor],
+    )
+    expect(result.rows[0]!.deleted_at).toBeNull()
+    expect(result.rows[0]!.collection_id).toBe(keep.rows[0]!.id)
   })
 
   it("refuses to file an item into another user's folder", async () => {

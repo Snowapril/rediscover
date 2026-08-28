@@ -100,7 +100,6 @@ export function CollectionTree({ userId, collections, selectedId, onSelect }: Pr
             onCancelDelete={() => setConfirmingDelete(null)}
             onConfirmDelete={() => {
               setConfirmingDelete(null)
-              if (selectedId === node.collection.id) onSelect(null)
               deleteCollection.mutate(node.collection.id)
             }}
             onAddChild={() => addChild(node.collection.id)}
@@ -181,8 +180,13 @@ function CollectionRow(props: RowProps) {
 
         {confirmingDelete ? (
           <span className="flex shrink-0 items-center gap-1 text-xs">
-            <button type="button" onClick={props.onConfirmDelete} className="text-accent">
-              Delete
+            <button
+              type="button"
+              onClick={props.onConfirmDelete}
+              title="Deletes this folder, the folders inside it, and their scraps"
+              className="text-accent"
+            >
+              Delete all
             </button>
             <button type="button" onClick={props.onCancelDelete} className="text-muted">
               Cancel
@@ -196,7 +200,7 @@ function CollectionRow(props: RowProps) {
             <IconButton label="Rename" onClick={props.onStartRename}>
               ✎
             </IconButton>
-            <IconButton label="Delete folder" onClick={props.onAskDelete}>
+            <IconButton label="Delete folder and its contents" onClick={props.onAskDelete}>
               ×
             </IconButton>
           </span>

@@ -3,6 +3,7 @@ import {
   createCollection,
   createItem,
   deleteCollection,
+  findLiveItemByUrl,
   listCollections,
   listItems,
   renameCollection,
@@ -86,6 +87,16 @@ export function useCreateItem() {
     onSuccess: (_item, input) =>
       client.invalidateQueries({ queryKey: itemsKey(input.collectionId) }),
   })
+}
+
+/*
+ * @brief Look up where a URL is already saved.
+ * @details Not a query hook: it runs once, in reaction to a failed save, rather
+ *   than on render.
+ * @return A function returning the existing scrap, or null.
+ */
+export function useFindExistingItem() {
+  return (url: string) => findLiveItemByUrl(supabase, url)
 }
 
 export function useSetReadState(collectionId: string | null) {

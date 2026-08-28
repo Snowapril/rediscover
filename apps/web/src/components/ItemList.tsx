@@ -1,24 +1,30 @@
 import { useState, type FormEvent } from 'react'
 import type { ItemRow } from '@rediscover/api-client'
-import { useCreateItem, useItems, useSetImportant, useSetReadState, useTrashItem } from '../data/queries.js'
+import {
+  useCollections,
+  useCreateItem,
+  useFindExistingItem,
+  useItems,
+  useSetImportant,
+  useSetReadState,
+  useTrashItem,
+} from '../data/queries.js'
 
 interface Props {
   userId: string
   collectionId: string | null
   collectionName: string
+  onOpenCollection(id: string | null): void
 }
 
+const DUPLICATE_CONSTRAINT = 'items_user_canonical_url_key'
+
 /*
- * @brief Turn a database failure into something worth reading.
- * @details The only failure a user can reliably provoke here is saving a link
- *   twice, and Postgres reports that as a constraint name.
- * @param error Whatever the mutation rejected with.
- * @return A sentence to show under the input.
+ * @brief Where a link the user tried to save again already lives.
+ * @details Null collectionId means the inbox, matching how a scrap is stored.
  */
-function describeSaveError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  if (message.includes('items_user_canonical_url_key')) return 'You have already saved this link.'
-  return message
+interface Duplicate {
+  collectionId: string | null
 }
 
 /*
@@ -42,22 +48,47 @@ function savedAgo(iso: string): string {
   return 'just now'
 }
 
-export function ItemList({ userId, collectionId, collectionName }: Props) {
+export function ItemList({ userId, collectionId, collectionName, onOpenCollection }: Props) {
   const items = useItems(collectionId)
+  const collections = useCollections()
   const createItem = useCreateItem()
+  const findExisting = useFindExistingItem()
+
   const [url, setUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [duplicate, setDuplicate] = useState<Duplicate | null>(null)
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
+    setDuplicate(null)
+
     createItem.mutate(
       { userId, collectionId, url },
       {
         onSuccess: () => setUrl(''),
-        onError: (cause) => setError(describeSaveError(cause)),
+        onError: (cause) => {
+          const message = cause instanceof Error ? cause.message : String(cause)
+          if (!message.includes(DUPLICATE_CONSTRAINT)) {
+            setError(message)
+            return
+          }
+          // Saying only "already saved" leaves the user hunting for it, so find
+          // the folder it is in before saying anything.
+          void findExisting(url)
+            .then((existing) => {
+              if (existing === null) setError('You have already saved this link.')
+              else setDuplicate({ collectionId: existing.collection_id })
+            })
+            .catch(() => setError('You have already saved this link.'))
+        },
       },
     )
+  }
+
+  function nameOf(id: string | null): string {
+    if (id === null) return 'Inbox'
+    return collections.data?.find((collection) => collection.id === id)?.name ?? 'another folder'
   }
 
   return (
@@ -82,16 +113,39 @@ export function ItemList({ userId, collectionId, collectionName }: Props) {
           Save
         </button>
       </form>
+
       {error !== null && <p className="mt-2 text-sm text-accent">{error}</p>}
+
+      {duplicate !== null && (
+        <p className="mt-2 flex flex-wrap items-center gap-x-2 text-sm text-accent">
+          {duplicate.collectionId === collectionId ? (
+            <span>Already saved in this folder.</span>
+          ) : (
+            <>
+              <span>
+                Already saved in <strong>{nameOf(duplicate.collectionId)}</strong>.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenCollection(duplicate.collectionId)
+                  setDuplicate(null)
+                }}
+                className="underline underline-offset-4"
+              >
+                Go there
+              </button>
+            </>
+          )}
+        </p>
+      )}
 
       <div className="mt-6">
         {items.isPending && <p className="text-sm text-muted">Loading…</p>}
         {items.isError && (
           <p className="text-sm text-accent">Could not load this folder. {String(items.error)}</p>
         )}
-        {items.data?.length === 0 && (
-          <p className="text-sm text-muted">Nothing saved here yet.</p>
-        )}
+        {items.data?.length === 0 && <p className="text-sm text-muted">Nothing saved here yet.</p>}
 
         <ul className="divide-y divide-line">
           {items.data?.map((item) => (

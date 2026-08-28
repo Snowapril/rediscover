@@ -65,8 +65,10 @@ export async function renameCollection(
 
 /*
  * @brief Delete a collection and everything nested under it.
- * @details Child collections are removed with it. Items are not: the schema
- *   detaches them, so they reappear in the inbox rather than being lost.
+ * @details Child collections are removed with it, and the scraps of the whole
+ *   subtree are moved to the trash by a database trigger. They are trashed
+ *   rather than destroyed, so they remain recoverable and their URLs are free
+ *   to scrap again.
  * @param client A signed-in client.
  * @param id The collection to delete.
  */

@@ -62,6 +62,33 @@ export async function createItem(
 }
 
 /*
+ * @brief Find the live scrap that already holds a URL, if there is one.
+ * @details Compares canonical forms, so a link that differs only by tracking
+ *   parameters still matches. Used to say where a duplicate already lives
+ *   rather than only that it exists.
+ * @param client A signed-in client.
+ * @param url The address the user tried to save.
+ * @return The existing scrap, or null if the URL is unusable or not saved.
+ */
+export async function findLiveItemByUrl(
+  client: RediscoverClient,
+  url: string,
+): Promise<ItemRow | null> {
+  const canonicalUrl = canonicalizeUrl(url)
+  if (canonicalUrl === null) return null
+
+  const rows = unwrap(
+    await client
+      .from('items')
+      .select('*')
+      .eq('canonical_url', canonicalUrl)
+      .is('deleted_at', null)
+      .limit(1),
+  )
+  return rows[0] ?? null
+}
+
+/*
  * @brief Mark a scrap read, unread, or in progress.
  * @details read_at is kept consistent with the state, which the schema also
  *   enforces: an unread scrap cannot carry a time it was read.

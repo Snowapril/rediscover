@@ -5,6 +5,7 @@ import {
   useCreateItem,
   useFindExistingItem,
   useItems,
+  useRetryExtraction,
   useSetImportant,
   useSetReadState,
   useTrashItem,
@@ -161,11 +162,14 @@ function ItemRowView({ item, collectionId }: { item: ItemRow; collectionId: stri
   const setReadState = useSetReadState(collectionId)
   const setImportant = useSetImportant(collectionId)
   const trashItem = useTrashItem(collectionId)
+  const retry = useRetryExtraction(collectionId)
+  const [thumbnailBroken, setThumbnailBroken] = useState(false)
 
   const isRead = item.read_state === 'read'
-  // Extraction has not run yet for a freshly saved link, so fall back to the
+  // Extraction may not have run, or may have failed, so fall back to the
   // address rather than showing an empty row.
   const heading = item.title ?? item.url
+  const showThumbnail = item.thumbnail_url !== null && !thumbnailBroken
 
   return (
     <li className="group flex items-start gap-3 py-3">
@@ -174,10 +178,21 @@ function ItemRowView({ item, collectionId }: { item: ItemRow; collectionId: stri
         aria-label={isRead ? 'Mark unread' : 'Mark read'}
         title={isRead ? 'Mark unread' : 'Mark read'}
         onClick={() => setReadState.mutate({ id: item.id, state: isRead ? 'unread' : 'read' })}
-        className={`mt-1 size-4 shrink-0 rounded-full border ${
+        className={`mt-1.5 size-4 shrink-0 rounded-full border ${
           isRead ? 'border-accent bg-accent' : 'border-line-strong'
         }`}
       />
+
+      {showThumbnail && (
+        <img
+          src={item.thumbnail_url ?? ''}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setThumbnailBroken(true)}
+          className="h-14 w-20 shrink-0 rounded border border-line object-cover"
+        />
+      )}
 
       <div className="min-w-0 flex-1">
         <a
@@ -188,9 +203,31 @@ function ItemRowView({ item, collectionId }: { item: ItemRow; collectionId: stri
         >
           {heading}
         </a>
-        <p className="mt-0.5 text-xs text-muted">
-          {item.domain} · saved {savedAgo(item.created_at)}
-          {item.extract_status === 'pending' && ' · not yet read in'}
+
+        {item.excerpt !== null && (
+          <p className="mt-0.5 line-clamp-2 text-xs text-muted">{item.excerpt}</p>
+        )}
+
+        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+          <span>{item.site_name ?? item.domain}</span>
+          {item.reading_time_min !== null && <span>· {item.reading_time_min} min read</span>}
+          <span>· saved {savedAgo(item.created_at)}</span>
+          {item.extract_status === 'pending' && <span>· reading the page…</span>}
+          {item.extract_status === 'failed' && (
+            <>
+              <span className="text-accent" title={item.extract_error ?? undefined}>
+                · could not read this page
+              </span>
+              <button
+                type="button"
+                onClick={() => retry.mutate(item)}
+                disabled={retry.isPending}
+                className="underline underline-offset-2 disabled:opacity-50"
+              >
+                {retry.isPending ? 'Retrying…' : 'Retry'}
+              </button>
+            </>
+          )}
         </p>
       </div>
 

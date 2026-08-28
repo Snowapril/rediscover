@@ -4,7 +4,7 @@ import {
   type ExtractedMetadata,
   type ItemProperties,
   type ItemPropertyKey,
-} from './types.js'
+} from './types.ts'
 
 /*
  * @brief Write one property onto a properties object, skipping absent values.

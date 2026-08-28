@@ -166,7 +166,11 @@ create table items (
 
   unique (id, user_id),
   -- A composite reference keeps an item and its folder owned by the same user.
-  foreign key (collection_id, user_id) references collections (id, user_id) on delete set null
+  -- Only collection_id is cleared when the folder goes away: an unqualified
+  -- SET NULL would null every column of the key, and user_id is NOT NULL, which
+  -- would make a folder holding items impossible to delete.
+  foreign key (collection_id, user_id) references collections (id, user_id)
+    on delete set null (collection_id)
 );
 
 -- One live scrap per canonical URL per user. Hashing keeps the key inside the

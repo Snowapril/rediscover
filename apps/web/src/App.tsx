@@ -1,8 +1,16 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { AuthProvider } from './auth/AuthProvider.js'
 import { useAuth } from './auth/useAuth.js'
 import { HomePage } from './routes/HomePage.js'
 import { LoginPage } from './routes/LoginPage.js'
+
+// Created once outside the component so a re-render never discards the cache.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, refetchOnWindowFocus: false },
+  },
+})
 
 /*
  * @brief Send signed-out visitors to the sign in screen.
@@ -41,9 +49,11 @@ function Router() {
 export function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Router />
-      </BrowserRouter>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <Router />
+        </BrowserRouter>
+      </QueryClientProvider>
     </AuthProvider>
   )
 }

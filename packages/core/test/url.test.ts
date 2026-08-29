@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canonicalizeUrl, extractDomain } from '../src/url.js'
+import { canonicalizeUrl, extractDomain } from '../src/url.ts'
 
 describe('canonicalizeUrl', () => {
   it('forces https, drops www, and trims a trailing slash', () => {

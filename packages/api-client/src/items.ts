@@ -1,7 +1,7 @@
 import { canonicalizeUrl, extractDomain, type ReadState } from '@rediscover/core'
 import type { Database } from '@rediscover/db/generated'
-import type { RediscoverClient } from './client.js'
-import { unwrap, unwrapVoid } from './result.js'
+import type { RediscoverClient } from './client.ts'
+import { unwrap, unwrapVoid } from './result.ts'
 
 export type ItemRow = Database['public']['Tables']['items']['Row']
 

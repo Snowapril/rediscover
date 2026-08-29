@@ -5,7 +5,7 @@ import {
   flattenCollectionTree,
   nextPosition,
   type CollectionInput,
-} from '../src/tree.js'
+} from '../src/tree.ts'
 
 function collection(id: string, parentId: string | null, position: number, name = id): CollectionInput {
   return { id, parentId, name, position }

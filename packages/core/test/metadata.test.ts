@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { applyUserEdit, mergeExtractedMetadata, resetProperties } from '../src/metadata.js'
-import { EMPTY_ITEM_PROPERTIES } from '../src/types.js'
+import { applyUserEdit, mergeExtractedMetadata, resetProperties } from '../src/metadata.ts'
+import { EMPTY_ITEM_PROPERTIES } from '../src/types.ts'
 
 const empty = EMPTY_ITEM_PROPERTIES
 

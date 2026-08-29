@@ -3,6 +3,7 @@ import {
   createCollection,
   createItem,
   deleteCollection,
+  extractIntoItem,
   findLiveItemByUrl,
   listCollections,
   listItems,
@@ -79,13 +80,35 @@ export function useDeleteCollection() {
   })
 }
 
+/*
+ * @brief Save a link, then fill it in from the page it points at.
+ * @details The scrap is stored first and shown immediately; reading the page
+ *   can take seconds and must not hold up the save. Extraction records its own
+ *   failure on the row, so a page that cannot be read still leaves a usable
+ *   scrap behind.
+ */
 export function useCreateItem() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (input: { userId: string; collectionId: string | null; url: string }) =>
       createItem(supabase, input),
-    onSuccess: (_item, input) =>
-      client.invalidateQueries({ queryKey: itemsKey(input.collectionId) }),
+    onSuccess: (item, input) => {
+      void client.invalidateQueries({ queryKey: itemsKey(input.collectionId) })
+      void extractIntoItem(supabase, item).finally(() => {
+        void client.invalidateQueries({ queryKey: itemsKey(input.collectionId) })
+      })
+    },
+  })
+}
+
+/*
+ * @brief Read a page again for a scrap whose extraction failed or was never run.
+ */
+export function useRetryExtraction(collectionId: string | null) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (item: ItemRow) => extractIntoItem(supabase, item),
+    onSuccess: () => client.invalidateQueries({ queryKey: itemsKey(collectionId) }),
   })
 }
 

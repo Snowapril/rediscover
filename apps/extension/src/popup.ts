@@ -1,4 +1,4 @@
-import { parseMetadata } from '@rediscover/core'
+import { parseMetadata } from '@rediscover/core/extract'
 import {
   applyExtractedMetadata,
   createItem,

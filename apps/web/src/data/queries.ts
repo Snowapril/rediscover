@@ -9,6 +9,7 @@ import {
   listCollections,
   listItemSummaries,
   listItems,
+  listScripts,
   mergeCollection,
   moveCollection,
   renameCollection,
@@ -101,6 +102,19 @@ export function useImportScraps() {
       void client.invalidateQueries({ queryKey: ['items'] })
       void client.invalidateQueries({ queryKey: ['item-summaries'] })
     },
+  })
+}
+
+/*
+ * @brief The sort or group scripts the user can choose from.
+ * @details Built-in and their own together; the list changes rarely, so it is
+ *   fetched once and reused across folders.
+ */
+export function useScripts(kind: 'sort' | 'group') {
+  return useQuery({
+    queryKey: ['scripts', kind],
+    queryFn: () => listScripts(supabase, kind),
+    staleTime: 5 * 60 * 1000,
   })
 }
 

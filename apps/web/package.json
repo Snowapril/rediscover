@@ -12,6 +12,7 @@
   "dependencies": {
     "@rediscover/api-client": "0.0.0",
     "@rediscover/core": "0.0.0",
+    "@rediscover/script-engine": "0.0.0",
     "@tanstack/react-query": "5.102.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",

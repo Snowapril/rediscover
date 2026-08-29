@@ -92,6 +92,16 @@ export function CollectionTree({ userId, collections, view, onSelect }: Props) {
             <span className="truncate">All folders</span>
           </button>
         </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => onSelect({ kind: 'import' })}
+            className={`${rowBase} ${view.kind === 'import' ? 'bg-line font-medium' : 'hover:bg-line/60'}`}
+          >
+            <span className="w-4 shrink-0" aria-hidden="true" />
+            <span className="truncate">Import</span>
+          </button>
+        </li>
       </ul>
 
       <ul className="space-y-0.5 border-t border-line pt-3">

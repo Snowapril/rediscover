@@ -5,6 +5,7 @@ import {
   deleteCollection,
   extractIntoItem,
   findLiveItemByUrl,
+  importScraps,
   listCollections,
   listItemSummaries,
   listItems,
@@ -15,9 +16,10 @@ import {
   setReadState,
   trashItem,
   type CollectionRow,
+  type ImportProgress,
   type ItemRow,
 } from '@rediscover/api-client'
-import type { ReadState } from '@rediscover/core'
+import type { ImportedScrap, ReadState } from '@rediscover/core'
 import { supabase } from '../supabase.ts'
 
 const COLLECTIONS_KEY = ['collections'] as const
@@ -82,6 +84,26 @@ export function useMoveCollection() {
  * @details Scraps change folders and one folder disappears, so the lists, the
  *   tree and the overview counts are all stale afterwards.
  */
+/*
+ * @brief Bring a library across from an export file.
+ * @details Everything is stale afterwards: new folders, new scraps, new counts.
+ */
+export function useImportScraps() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      userId: string
+      scraps: ImportedScrap[]
+      onProgress?: (progress: ImportProgress) => void
+    }) => importScraps(supabase, input.userId, input.scraps, input.onProgress),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: COLLECTIONS_KEY })
+      void client.invalidateQueries({ queryKey: ['items'] })
+      void client.invalidateQueries({ queryKey: ['item-summaries'] })
+    },
+  })
+}
+
 export function useMergeCollection() {
   const client = useQueryClient()
   return useMutation({

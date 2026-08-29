@@ -1,6 +1,7 @@
 export * from './client.ts'
 export * from './collections.ts'
 export * from './extraction.ts'
+export * from './importing.ts'
 export * from './items.ts'
 export * from './result.ts'
 export type { Database } from '@rediscover/db/generated'

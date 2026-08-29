@@ -8,6 +8,7 @@ export type View =
   | { kind: 'inbox' }
   | { kind: 'collection'; id: string }
   | { kind: 'folders' }
+  | { kind: 'import' }
 
 /*
  * @brief The folder a view is looking at, in the form the queries take.

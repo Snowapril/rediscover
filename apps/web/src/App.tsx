@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
-import { AuthProvider } from './auth/AuthProvider.js'
-import { useAuth } from './auth/useAuth.js'
-import { HomePage } from './routes/HomePage.js'
-import { LoginPage } from './routes/LoginPage.js'
+import { AuthProvider } from './auth/AuthProvider.tsx'
+import { useAuth } from './auth/useAuth.ts'
+import { HomePage } from './routes/HomePage.tsx'
+import { LoginPage } from './routes/LoginPage.tsx'
 
 // Created once outside the component so a re-render never discards the cache.
 const queryClient = new QueryClient({

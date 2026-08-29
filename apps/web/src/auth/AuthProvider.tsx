@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { supabase } from '../supabase.js'
-import { AuthContext, type AuthValue } from './context.js'
+import { supabase } from '../supabase.ts'
+import { AuthContext, type AuthValue } from './context.ts'
 
 /*
  * @brief Track the Supabase session and expose it to the tree below.

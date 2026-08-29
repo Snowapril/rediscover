@@ -64,6 +64,52 @@ export async function renameCollection(
 }
 
 /*
+ * @brief File a collection under a new parent, at a given place among its siblings.
+ * @details Position is fractional, so reordering touches one row rather than
+ *   renumbering the whole level. The database refuses a move that would make a
+ *   folder its own ancestor; canMoveCollection in @rediscover/core answers the
+ *   same question up front so the drop is never offered.
+ * @param client A signed-in client.
+ * @param id The collection to move.
+ * @param parentId Its new parent, or null for the top level.
+ * @param position Where it sits among its new siblings.
+ */
+export async function moveCollection(
+  client: RediscoverClient,
+  id: string,
+  parentId: string | null,
+  position: number,
+): Promise<void> {
+  unwrapVoid(
+    await client.from('collections').update({ parent_id: parentId, position }).eq('id', id),
+  )
+}
+
+/*
+ * @brief Empty one folder into another and remove it.
+ * @details The scraps move, the subfolders move, and the emptied folder goes —
+ *   in one database transaction, because a failure between those steps would
+ *   leave a half-merged tree, and deleting a folder that still held scraps would
+ *   send them to the trash. The database refuses a merge into the folder's own
+ *   subtree, and, because the function runs with the caller's rights, reports a
+ *   folder belonging to anyone else as missing.
+ * @param client A signed-in client.
+ * @param sourceId The folder to empty out and remove.
+ * @param targetId The folder that receives its contents.
+ */
+export async function mergeCollection(
+  client: RediscoverClient,
+  sourceId: string,
+  targetId: string,
+): Promise<void> {
+  const { error } = await client.rpc('merge_collection', {
+    source_id: sourceId,
+    target_id: targetId,
+  })
+  if (error !== null) throw new Error(error.message, { cause: error })
+}
+
+/*
  * @brief Delete a collection and everything nested under it.
  * @details Child collections are removed with it, and the scraps of the whole
  *   subtree are moved to the trash by a database trigger. They are trashed

@@ -10,5 +10,6 @@
 - Upgrade Node to 22.22+ so react-router 8 can be used
 - M1: item detail panel with property editing
 - M1: Chrome MV3 extension with one-click save
+- Renumber sibling positions when repeated drops into one gap exhaust precision
 - Verify the extract function bundles correctly on `supabase functions deploy`
 - Guard extraction against a host name that resolves into a private range

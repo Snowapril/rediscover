@@ -1,5 +1,5 @@
 import { useContext } from 'react'
-import { AuthContext, type AuthValue } from './context.js'
+import { AuthContext, type AuthValue } from './context.ts'
 
 /*
  * @brief Read the current authentication state.

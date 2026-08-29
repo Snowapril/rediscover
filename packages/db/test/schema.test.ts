@@ -171,6 +171,106 @@ describe('constraints', () => {
   })
 })
 
+describe('merging folders', () => {
+  async function folder(userId: string, name: string, parentId: string | null = null) {
+    const result = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, parent_id, name) values ($1, $2, $3) returning id`,
+      [userId, parentId, name],
+    )
+    return result.rows[0]!.id
+  }
+
+  it('moves the scraps and subfolders across, then removes the folder', async () => {
+    const source = await folder(alice, 'Source')
+    const target = await folder(alice, 'Target')
+    const child = await folder(alice, 'Child', source)
+    const scrap = await insertItem(alice, 'https://example.com/merge-me', source)
+
+    await db.pg.query('select merge_collection($1, $2)', [source, target])
+
+    const item = await db.pg.query<{ collection_id: string | null; deleted_at: string | null }>(
+      'select collection_id, deleted_at from items where id = $1',
+      [scrap],
+    )
+    expect(item.rows[0]!.collection_id).toBe(target)
+    // The delete trigger trashes whatever is still filed in a folder, so this
+    // also proves the scraps left before the folder went.
+    expect(item.rows[0]!.deleted_at).toBeNull()
+
+    const moved = await db.pg.query<{ parent_id: string | null }>(
+      'select parent_id from collections where id = $1',
+      [child],
+    )
+    expect(moved.rows[0]!.parent_id).toBe(target)
+
+    const gone = await db.pg.query<{ count: number }>(
+      'select count(*)::int as count from collections where id = $1',
+      [source],
+    )
+    expect(gone.rows[0]!.count).toBe(0)
+  })
+
+  it('places arriving subfolders after the ones already there', async () => {
+    const source = await folder(alice, 'Source')
+    const target = await folder(alice, 'Target')
+    await db.pg.query(
+      `insert into collections (user_id, parent_id, name, position) values ($1, $2, 'Existing', 0)`,
+      [alice, target],
+    )
+    await db.pg.query(
+      `insert into collections (user_id, parent_id, name, position) values ($1, $2, 'Arriving', 0)`,
+      [alice, source],
+    )
+
+    await db.pg.query('select merge_collection($1, $2)', [source, target])
+
+    const result = await db.pg.query<{ name: string }>(
+      'select name from collections where parent_id = $1 order by position',
+      [target],
+    )
+    expect(result.rows.map((row) => row.name)).toEqual(['Existing', 'Arriving'])
+  })
+
+  it('refuses to merge a folder into itself', async () => {
+    const only = await folder(alice, 'Only')
+    await expect(db.pg.query('select merge_collection($1, $1)', [only])).rejects.toThrow(
+      /into itself/,
+    )
+  })
+
+  it('refuses to merge a folder into its own subfolder', async () => {
+    const parent = await folder(alice, 'Parent')
+    const child = await folder(alice, 'Child', parent)
+    const grandchild = await folder(alice, 'Grandchild', child)
+
+    await expect(db.pg.query('select merge_collection($1, $2)', [parent, child])).rejects.toThrow(
+      /own subfolders/,
+    )
+    await expect(
+      db.pg.query('select merge_collection($1, $2)', [parent, grandchild]),
+    ).rejects.toThrow(/own subfolders/)
+  })
+
+  it("refuses to touch another user's folder", async () => {
+    const mine = await folder(bob, 'Mine')
+    const theirs = await folder(alice, 'Theirs')
+
+    await expect(
+      db.asUser(bob, (pg) => pg.query('select merge_collection($1, $2)', [theirs, mine])),
+    ).rejects.toThrow(/no such folder/)
+
+    await expect(
+      db.asUser(bob, (pg) => pg.query('select merge_collection($1, $2)', [mine, theirs])),
+    ).rejects.toThrow(/no such folder/)
+
+    const survived = await db.pg.query<{ count: number }>(
+      'select count(*)::int as count from collections where id = $1',
+      [theirs],
+    )
+    expect(survived.rows[0]!.count).toBe(1)
+  })
+})
+
 describe('row level security', () => {
   it("hides one user's items from another", async () => {
     await insertItem(alice, 'https://example.com/alice-secret')

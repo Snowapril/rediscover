@@ -476,6 +476,10 @@ export type Database = {
     }
     Functions: {
       item_property_keys: { Args: never; Returns: string[] }
+      merge_collection: {
+        Args: { source_id: string; target_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       extract_status: "pending" | "ok" | "failed"

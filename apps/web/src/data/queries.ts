@@ -8,6 +8,7 @@ import {
   listCollections,
   listItemSummaries,
   listItems,
+  mergeCollection,
   moveCollection,
   renameCollection,
   setImportant,
@@ -73,6 +74,24 @@ export function useMoveCollection() {
     mutationFn: (input: { id: string; parentId: string | null; position: number }) =>
       moveCollection(supabase, input.id, input.parentId, input.position),
     onSuccess: () => client.invalidateQueries({ queryKey: COLLECTIONS_KEY }),
+  })
+}
+
+/*
+ * @brief Empty one folder into another and remove it.
+ * @details Scraps change folders and one folder disappears, so the lists, the
+ *   tree and the overview counts are all stale afterwards.
+ */
+export function useMergeCollection() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { sourceId: string; targetId: string }) =>
+      mergeCollection(supabase, input.sourceId, input.targetId),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: COLLECTIONS_KEY })
+      void client.invalidateQueries({ queryKey: ['items'] })
+      void client.invalidateQueries({ queryKey: ['item-summaries'] })
+    },
   })
 }
 

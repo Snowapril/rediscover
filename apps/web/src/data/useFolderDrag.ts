@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from 'react'
+import { useRef, useState, type DragEvent } from 'react'
 import {
   canMoveCollection,
   nextPosition,
@@ -6,12 +6,39 @@ import {
   type CollectionInput,
   type CollectionNode,
 } from '@rediscover/core'
-import { useMoveCollection } from './queries.ts'
+import { useMergeCollection, useMoveCollection } from './queries.ts'
 
 /*
  * @brief Where a dragged folder would land relative to the row under the cursor.
+ * @details `merge` is not a position: it empties the dragged folder into the one
+ *   under the cursor and removes it. It is reached only by shaking, never by
+ *   hovering, because it destroys a folder and should not be something a slow
+ *   drag falls into.
  */
-export type DropMode = 'before' | 'inside' | 'after'
+export type DropMode = 'before' | 'inside' | 'after' | 'merge'
+
+/*
+ * @brief How long the shake must go on before merging is offered.
+ */
+const SHAKE_HOLD_MS = 1000
+
+/*
+ * @brief Changes of direction that count as a shake rather than a wobble.
+ */
+const SHAKE_REVERSALS = 3
+
+/*
+ * @brief Movement below this is noise, not a stroke of a shake.
+ */
+const SHAKE_MIN_TRAVEL_PX = 6
+
+interface ShakeTrack {
+  id: string
+  startedAt: number
+  lastX: number
+  direction: number
+  reversals: number
+}
 
 interface DropTarget {
   id: string
@@ -81,7 +108,38 @@ export function useFolderDrag<T extends CollectionInput>(
 ): FolderDrag {
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
+  const shake = useRef<ShakeTrack | null>(null)
   const moveCollection = useMoveCollection()
+  const mergeCollection = useMergeCollection()
+
+  /*
+   * @brief Follow the cursor's back-and-forth over one folder.
+   * @details Kept in a ref rather than state: it updates on every dragover, and
+   *   only the moment it arms is worth a render. The track resets whenever the
+   *   folder under the cursor changes, so a shake cannot be assembled from
+   *   passes over several folders.
+   * @param id The folder under the cursor.
+   * @param clientX Where the cursor is.
+   * @param now The current time.
+   * @return Whether merging should be offered.
+   */
+  function trackShake(id: string, clientX: number, now: number): boolean {
+    const track = shake.current
+    if (track === null || track.id !== id) {
+      shake.current = { id, startedAt: now, lastX: clientX, direction: 0, reversals: 0 }
+      return false
+    }
+
+    const travel = clientX - track.lastX
+    if (Math.abs(travel) >= SHAKE_MIN_TRAVEL_PX) {
+      const direction = travel > 0 ? 1 : -1
+      if (track.direction !== 0 && direction !== track.direction) track.reversals += 1
+      track.direction = direction
+      track.lastX = clientX
+    }
+
+    return track.reversals >= SHAKE_REVERSALS && now - track.startedAt >= SHAKE_HOLD_MS
+  }
 
   function siblingsOf(parentId: string | null): T[] {
     return entries
@@ -90,7 +148,7 @@ export function useFolderDrag<T extends CollectionInput>(
   }
 
   function parentForDrop(target: DropTarget): string | null {
-    if (target.mode === 'inside') return target.id
+    if (target.mode === 'inside' || target.mode === 'merge') return target.id
     return entries.find((entry) => entry.id === target.id)?.parentId ?? null
   }
 
@@ -103,6 +161,13 @@ export function useFolderDrag<T extends CollectionInput>(
   function commit(target: DropTarget) {
     setDropTarget(null)
     if (dragId === null || !allowsDrop(target)) return
+
+    if (target.mode === 'merge') {
+      mergeCollection.mutate({ sourceId: dragId, targetId: target.id })
+      onMoved?.(target.id)
+      setDragId(null)
+      return
+    }
 
     const parentId = parentForDrop(target)
     let position: number
@@ -141,20 +206,35 @@ export function useFolderDrag<T extends CollectionInput>(
         onDragEnd: () => {
           setDragId(null)
           setDropTarget(null)
+          shake.current = null
         },
         onDragOver: (event) => {
-          const target: DropTarget = { id, mode: dropModeFor(event) }
+          const placement = dropModeFor(event)
+          // Shaking only means merge over the body of a row; at the edges the
+          // gesture is still asking for a position.
+          const shaking =
+            placement === 'inside' && trackShake(id, event.clientX, Date.now())
+          const target: DropTarget = { id, mode: shaking ? 'merge' : placement }
+
           if (!allowsDrop(target)) {
             setDropTarget(null)
             return
           }
           event.preventDefault()
-          setDropTarget(target)
+          setDropTarget((current) =>
+            current?.id === target.id && current.mode === target.mode ? current : target,
+          )
         },
-        onDragLeave: () => setDropTarget(null),
+        onDragLeave: () => {
+          setDropTarget(null)
+          shake.current = null
+        },
         onDrop: (event) => {
           event.preventDefault()
-          commit({ id, mode: dropModeFor(event) })
+          // The drop takes the mode the highlight was showing, so what happens
+          // is what the cursor said would happen.
+          commit(dropTarget?.id === id ? dropTarget : { id, mode: dropModeFor(event) })
+          shake.current = null
         },
       }
     },
@@ -167,6 +247,7 @@ export function useFolderDrag<T extends CollectionInput>(
  * @return Classes to add to the element; it must be positioned relatively.
  */
 export function dropIndicatorClasses(mode: DropMode | null): string {
+  if (mode === 'merge') return 'ring-2 ring-accent bg-line'
   if (mode === 'inside') return 'ring-1 ring-accent'
   if (mode === 'before') {
     return 'before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-accent'

@@ -13,6 +13,7 @@ import {
   type FolderDragHandlers,
   type DropMode,
 } from '../data/useFolderDrag.ts'
+import { MergeBadge } from './MergeBadge.tsx'
 import type { View } from '../view.ts'
 
 type TreeEntry = ReturnType<typeof toCollectionInput>
@@ -168,6 +169,7 @@ function CollectionRow(props: RowProps) {
           dragging ? 'opacity-40' : ''
         } ${selected ? 'bg-line font-medium' : 'hover:bg-line/60'}`}
       >
+        {dropMode === 'merge' && <MergeBadge name={node.collection.name} />}
         {hasChildren ? (
           <button
             type="button"

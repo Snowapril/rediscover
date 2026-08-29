@@ -8,6 +8,7 @@ import {
 import { toCollectionInput, type CollectionRow } from '@rediscover/api-client'
 import { useItemSummaries } from '../data/queries.ts'
 import { dropIndicatorClasses, useFolderDrag, type FolderDrag } from '../data/useFolderDrag.ts'
+import { MergeBadge } from './MergeBadge.tsx'
 import type { View } from '../view.ts'
 
 type TreeEntry = ReturnType<typeof toCollectionInput>
@@ -53,7 +54,8 @@ export function FolderMap({ collections, onOpen }: Props) {
       <h1 className="text-lg font-semibold tracking-tight">All folders</h1>
       <p className="mt-1 text-sm text-muted">
         Every folder at once, with a glimpse of what each one holds. Drag a folder onto another to
-        file it inside, or onto the edge of one to place it alongside.
+        file it inside, onto the edge of one to place it alongside, or shake it over one for a
+        second to merge the two.
       </p>
 
       {roots.length === 0 && <p className="mt-6 text-sm text-muted">No folders yet.</p>}
@@ -127,14 +129,16 @@ function FolderCard({
   const direct = summary?.directItems ?? 0
   const total = summary?.totalItems ?? 0
   const dragging = drag.dragId === node.collection.id
+  const dropMode = drag.modeFor(node.collection.id)
 
   return (
     <div
       {...drag.dragProps(node.collection.id)}
       className={`relative rounded-lg border border-line bg-surface ${dropIndicatorClasses(
-        drag.modeFor(node.collection.id),
+        dropMode,
       )} ${dragging ? 'opacity-40' : ''}`}
     >
+      {dropMode === 'merge' && <MergeBadge name={node.collection.name} />}
       <button
         type="button"
         onClick={() => onOpen({ kind: 'collection', id: node.collection.id })}

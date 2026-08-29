@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../supabase.ts'
 import { AuthContext, type AuthValue } from './context.ts'
+import { announceSessionToExtension, serveSessionToExtension } from './extensionBridge.ts'
 
 /*
  * @brief Track the Supabase session and expose it to the tree below.
@@ -13,6 +14,13 @@ import { AuthContext, type AuthValue } from './context.ts'
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Read through a ref so the listener installed below always sees the current
+  // session without being torn down and rebuilt on every change.
+  const latest = useRef<Session | null>(null)
+  latest.current = session
+
+  useEffect(() => serveSessionToExtension(() => latest.current), [])
 
   useEffect(() => {
     let active = true
@@ -26,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession)
       setLoading(false)
+      announceSessionToExtension(nextSession)
     })
 
     return () => {

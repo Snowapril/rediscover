@@ -147,6 +147,20 @@ export async function setImportant(
 }
 
 /*
+ * @brief File a scrap under a different folder.
+ * @param client A signed-in client.
+ * @param id The scrap to move.
+ * @param collectionId Its new folder, or null for the inbox.
+ */
+export async function setItemCollection(
+  client: RediscoverClient,
+  id: string,
+  collectionId: string | null,
+): Promise<void> {
+  unwrapVoid(await client.from('items').update({ collection_id: collectionId }).eq('id', id))
+}
+
+/*
  * @brief Move a scrap to the trash.
  * @details A soft delete, so the row survives and its URL becomes available to
  *   scrap again.

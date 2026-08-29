@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Save to rediscover</title>
+    <style>
+      :root {
+        --canvas: #f6f7f8;
+        --surface: #ffffff;
+        --line: #e1e5e9;
+        --line-strong: #cdd4db;
+        --ink: #151a20;
+        --muted: #5b6672;
+        --accent: #0e6b6e;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #14181d;
+          --surface: #1a1f26;
+          --line: #2a313a;
+          --line-strong: #3a434e;
+          --ink: #e8ebee;
+          --muted: #98a3af;
+          --accent: #4fb3b5;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        width: 20rem;
+        margin: 0;
+        padding: 0.9rem 1rem 1rem;
+        background: var(--canvas);
+        color: var(--ink);
+        font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      h1 {
+        margin: 0 0 0.6rem;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      .status {
+        font-weight: 500;
+      }
+
+      .detail {
+        margin-top: 0.15rem;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+
+      .card {
+        display: flex;
+        gap: 0.65rem;
+        margin-top: 0.75rem;
+        padding: 0.6rem;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+      }
+
+      .card img {
+        width: 3.5rem;
+        height: 2.6rem;
+        flex-shrink: 0;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        object-fit: cover;
+        background: var(--canvas);
+      }
+
+      .card div {
+        min-width: 0;
+      }
+
+      .title {
+        font-weight: 500;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .site {
+        margin-top: 0.15rem;
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+
+      label {
+        display: block;
+        margin-top: 0.85rem;
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+
+      select,
+      button {
+        font: inherit;
+        color: var(--ink);
+      }
+
+      select {
+        width: 100%;
+        margin-top: 0.25rem;
+        padding: 0.35rem 0.4rem;
+        border: 1px solid var(--line-strong);
+        border-radius: 5px;
+        background: var(--surface);
+      }
+
+      button {
+        margin-top: 0.85rem;
+        padding: 0.45rem 0.8rem;
+        border: 1px solid var(--ink);
+        border-radius: 5px;
+        background: var(--ink);
+        color: var(--canvas);
+        font-weight: 500;
+        cursor: pointer;
+      }
+
+      button.ghost {
+        border-color: var(--line-strong);
+        background: transparent;
+        color: var(--ink);
+      }
+
+      .error {
+        color: var(--accent);
+      }
+
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>rediscover</h1>
+    <p class="status" id="status">Saving…</p>
+    <p class="detail hidden" id="detail"></p>
+
+    <div class="card hidden" id="card">
+      <img id="thumbnail" alt="" />
+      <div>
+        <div class="title" id="title"></div>
+        <div class="site" id="site"></div>
+      </div>
+    </div>
+
+    <label class="hidden" id="folder-label">
+      Folder
+      <select id="folder"></select>
+    </label>
+
+    <button class="ghost hidden" id="open">Open rediscover</button>
+
+    <script type="module" src="/src/popup.ts"></script>
+  </body>
+</html>

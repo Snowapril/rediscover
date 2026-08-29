@@ -112,6 +112,24 @@ export async function extractIntoItem(
     )
   }
 
+  return applyExtractedMetadata(client, item, extracted)
+}
+
+/*
+ * @brief Fold metadata into a scrap and record that the page has been read.
+ * @details Split out from extractIntoItem because the browser extension reads
+ *   the page it is already looking at — the rendered one, past any login wall —
+ *   and needs the same merge and the same bookkeeping without the server fetch.
+ * @param client A signed-in client.
+ * @param item The scrap to fill in.
+ * @param extracted What the page says about itself.
+ * @return The updated scrap.
+ */
+export async function applyExtractedMetadata(
+  client: RediscoverClient,
+  item: ItemRow,
+  extracted: ExtractedMetadata,
+): Promise<ItemRow> {
   const merged = mergeExtractedMetadata(itemProperties(item), extracted, editedFields(item))
 
   return unwrap(

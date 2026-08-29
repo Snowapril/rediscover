@@ -1,32 +1,21 @@
-import { useMemo, useState, type DragEvent } from 'react'
+import { useMemo, useState } from 'react'
 import {
   buildCollectionTree,
-  canMoveCollection,
   flattenCollectionTree,
   nextPosition,
-  positionBetween,
   type CollectionNode,
 } from '@rediscover/core'
 import { toCollectionInput, type CollectionRow } from '@rediscover/api-client'
+import { useCreateCollection, useDeleteCollection, useRenameCollection } from '../data/queries.ts'
 import {
-  useCreateCollection,
-  useDeleteCollection,
-  useMoveCollection,
-  useRenameCollection,
-} from '../data/queries.ts'
+  dropIndicatorClasses,
+  useFolderDrag,
+  type FolderDragHandlers,
+  type DropMode,
+} from '../data/useFolderDrag.ts'
 import type { View } from '../view.ts'
 
 type TreeEntry = ReturnType<typeof toCollectionInput>
-
-/*
- * @brief Where a dragged folder would land relative to the row under the cursor.
- */
-type DropMode = 'before' | 'inside' | 'after'
-
-interface DropTarget {
-  id: string
-  mode: DropMode
-}
 
 interface Props {
   userId: string
@@ -37,45 +26,25 @@ interface Props {
 
 const rowBase = 'group flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-left text-sm'
 
-/*
- * @brief Which third of a row the cursor is in.
- * @details The middle two thirds file the folder inside the row; the outer
- *   slivers place it before or after as a sibling, which is the only way to
- *   express reordering with a single pointer.
- * @param event The drag event over the row.
- * @return The drop this position means.
- */
-function dropModeFor(event: DragEvent<HTMLElement>): DropMode {
-  const box = event.currentTarget.getBoundingClientRect()
-  const offset = (event.clientY - box.top) / box.height
-  if (offset < 0.25) return 'before'
-  if (offset > 0.75) return 'after'
-  return 'inside'
-}
-
 export function CollectionTree({ userId, collections, view, onSelect }: Props) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const [renaming, setRenaming] = useState<string | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
-  const [dragId, setDragId] = useState<string | null>(null)
-  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
 
   const createCollection = useCreateCollection()
   const renameCollection = useRenameCollection()
   const deleteCollection = useDeleteCollection()
-  const moveCollection = useMoveCollection()
 
   const entries = useMemo(() => collections.map(toCollectionInput), [collections])
   const roots = useMemo(() => buildCollectionTree(entries), [entries])
   const rows = useMemo(() => flattenCollectionTree(roots, expanded), [roots, expanded])
 
-  const selectedId = view.kind === 'collection' ? view.id : null
-
-  function siblingsOf(parentId: string | null): TreeEntry[] {
-    return entries
-      .filter((entry) => entry.parentId === parentId)
-      .sort((a, b) => a.position - b.position)
+  const reveal = (parentId: string | null) => {
+    if (parentId !== null) setExpanded((current) => new Set(current).add(parentId))
   }
+  const drag = useFolderDrag(entries, roots, reveal)
+
+  const selectedId = view.kind === 'collection' ? view.id : null
 
   function toggle(id: string) {
     setExpanded((current) => {
@@ -87,56 +56,16 @@ export function CollectionTree({ userId, collections, view, onSelect }: Props) {
   }
 
   function addChild(parentId: string | null) {
+    const siblings = entries.filter((entry) => entry.parentId === parentId)
     createCollection.mutate(
-      { userId, parentId, name: 'New folder', position: nextPosition(siblingsOf(parentId)) },
+      { userId, parentId, name: 'New folder', position: nextPosition(siblings) },
       {
         onSuccess: (created) => {
-          if (parentId !== null) setExpanded((current) => new Set(current).add(parentId))
+          reveal(parentId)
           setRenaming(created.id)
         },
       },
     )
-  }
-
-  /*
-   * @brief The parent a drop would file the folder under.
-   */
-  function parentForDrop(target: DropTarget): string | null {
-    if (target.mode === 'inside') return target.id
-    return entries.find((entry) => entry.id === target.id)?.parentId ?? null
-  }
-
-  function allowsDrop(target: DropTarget): boolean {
-    if (dragId === null) return false
-    if (target.id === dragId) return false
-    return canMoveCollection(roots, dragId, parentForDrop(target))
-  }
-
-  function handleDrop(target: DropTarget) {
-    setDropTarget(null)
-    if (dragId === null || !allowsDrop(target)) return
-
-    const parentId = parentForDrop(target)
-    let position: number
-
-    if (target.mode === 'inside') {
-      position = nextPosition(siblingsOf(target.id))
-    } else {
-      // Ordering is computed against the siblings the folder is joining, with
-      // the folder itself removed so dropping it next to where it already sits
-      // does not measure the gap against itself.
-      const siblings = siblingsOf(parentId).filter((entry) => entry.id !== dragId)
-      const index = siblings.findIndex((entry) => entry.id === target.id)
-      const slot = target.mode === 'before' ? index : index + 1
-      position = positionBetween(
-        slot > 0 ? (siblings[slot - 1]?.position ?? null) : null,
-        siblings[slot]?.position ?? null,
-      )
-    }
-
-    moveCollection.mutate({ id: dragId, parentId, position })
-    if (parentId !== null) setExpanded((current) => new Set(current).add(parentId))
-    setDragId(null)
   }
 
   return (
@@ -173,8 +102,9 @@ export function CollectionTree({ userId, collections, view, onSelect }: Props) {
             expanded={expanded.has(node.collection.id)}
             renaming={renaming === node.collection.id}
             confirmingDelete={confirmingDelete === node.collection.id}
-            dragging={dragId === node.collection.id}
-            dropMode={dropTarget?.id === node.collection.id ? dropTarget.mode : null}
+            dragging={drag.dragId === node.collection.id}
+            dropMode={drag.modeFor(node.collection.id)}
+            dragProps={drag.dragProps(node.collection.id, renaming !== node.collection.id)}
             onSelect={() => onSelect({ kind: 'collection', id: node.collection.id })}
             onToggle={() => toggle(node.collection.id)}
             onStartRename={() => setRenaming(node.collection.id)}
@@ -192,25 +122,6 @@ export function CollectionTree({ userId, collections, view, onSelect }: Props) {
               deleteCollection.mutate(node.collection.id)
             }}
             onAddChild={() => addChild(node.collection.id)}
-            onDragStart={() => setDragId(node.collection.id)}
-            onDragEnd={() => {
-              setDragId(null)
-              setDropTarget(null)
-            }}
-            onDragOver={(event) => {
-              const target: DropTarget = { id: node.collection.id, mode: dropModeFor(event) }
-              if (!allowsDrop(target)) {
-                setDropTarget(null)
-                return
-              }
-              event.preventDefault()
-              setDropTarget(target)
-            }}
-            onDragLeave={() => setDropTarget(null)}
-            onDrop={(event) => {
-              event.preventDefault()
-              handleDrop({ id: node.collection.id, mode: dropModeFor(event) })
-            }}
           />
         ))}
       </ul>
@@ -234,6 +145,7 @@ interface RowProps {
   confirmingDelete: boolean
   dragging: boolean
   dropMode: DropMode | null
+  dragProps: FolderDragHandlers
   onSelect(): void
   onToggle(): void
   onStartRename(): void
@@ -242,37 +154,19 @@ interface RowProps {
   onCancelDelete(): void
   onConfirmDelete(): void
   onAddChild(): void
-  onDragStart(): void
-  onDragEnd(): void
-  onDragOver(event: DragEvent<HTMLElement>): void
-  onDragLeave(): void
-  onDrop(event: DragEvent<HTMLElement>): void
 }
 
 function CollectionRow(props: RowProps) {
   const { node, selected, expanded, renaming, confirmingDelete, dragging, dropMode } = props
   const hasChildren = node.children.length > 0
 
-  const dropRing = dropMode === 'inside' ? 'ring-1 ring-accent' : ''
-  const dropEdge =
-    dropMode === 'before'
-      ? 'before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-accent'
-      : dropMode === 'after'
-        ? 'after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-accent'
-        : ''
-
   return (
     <li style={{ paddingLeft: `${node.depth * 0.85}rem` }}>
       <div
-        draggable={!renaming}
-        onDragStart={props.onDragStart}
-        onDragEnd={props.onDragEnd}
-        onDragOver={props.onDragOver}
-        onDragLeave={props.onDragLeave}
-        onDrop={props.onDrop}
-        className={`relative ${rowBase} ${dropRing} ${dropEdge} ${dragging ? 'opacity-40' : ''} ${
-          selected ? 'bg-line font-medium' : 'hover:bg-line/60'
-        }`}
+        {...props.dragProps}
+        className={`relative ${rowBase} ${dropIndicatorClasses(dropMode)} ${
+          dragging ? 'opacity-40' : ''
+        } ${selected ? 'bg-line font-medium' : 'hover:bg-line/60'}`}
       >
         {hasChildren ? (
           <button

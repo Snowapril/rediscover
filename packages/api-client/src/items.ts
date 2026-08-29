@@ -1,4 +1,9 @@
-import { canonicalizeUrl, extractDomain, type ReadState } from '@rediscover/core'
+import {
+  canonicalizeUrl,
+  extractDomain,
+  type ReadState,
+  type ScriptItem,
+} from '@rediscover/core'
 import type { Database } from '@rediscover/db/generated'
 import type { RediscoverClient } from './client.ts'
 import { unwrap, unwrapVoid } from './result.ts'
@@ -169,4 +174,36 @@ export async function setItemCollection(
  */
 export async function trashItem(client: RediscoverClient, id: string): Promise<void> {
   unwrapVoid(await client.from('items').update({ deleted_at: new Date().toISOString() }).eq('id', id))
+}
+
+/*
+ * @brief Reduce a stored scrap to the shape user scripts are given.
+ * @details Timestamps become epoch milliseconds so a script can do arithmetic
+ *   on them without a Date, and the object carries nothing a script has no
+ *   business seeing.
+ * @param row The scrap as stored.
+ * @param tags Its tags, if they have been loaded.
+ * @return The scrap as a script sees it.
+ */
+export function toScriptItem(row: ItemRow, tags: readonly string[] = []): ScriptItem {
+  return {
+    id: row.id,
+    url: row.url,
+    domain: row.domain,
+    title: row.title,
+    excerpt: row.excerpt,
+    thumbnailUrl: row.thumbnail_url,
+    siteName: row.site_name,
+    author: row.author,
+    publishedAt: row.published_at === null ? null : new Date(row.published_at).getTime(),
+    createdAt: new Date(row.created_at).getTime(),
+    updatedAt: new Date(row.updated_at).getTime(),
+    readState: row.read_state,
+    readAt: row.read_at === null ? null : new Date(row.read_at).getTime(),
+    isImportant: row.is_important,
+    tags: [...tags],
+    readingTimeMin: row.reading_time_min,
+    mediaType: row.media_type,
+    note: row.note,
+  }
 }

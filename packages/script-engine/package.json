@@ -1,24 +1,24 @@
 {
-  "name": "@rediscover/db",
+  "name": "@rediscover/script-engine",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./testing": "./src/testing.ts",
-    "./generated": "./src/generated.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
+    "@rediscover/core": "0.0.0",
+    "quickjs-emscripten-core": "0.32.0"
+  },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.7",
     "typescript": "5.8.3",
-    "vitest": "3.1.3",
-    "@rediscover/script-engine": "0.0.0",
-    "@rediscover/core": "0.0.0"
+    "vitest": "3.1.3"
   }
 }

@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { ItemRow } from '@rediscover/api-client'
+import type { ScriptRow } from '@rediscover/api-client'
+import { useSortedItems } from '../data/useSortedItems.ts'
 import {
   useCollections,
   useCreateItem,
@@ -7,6 +9,7 @@ import {
   useItems,
   useRetryExtraction,
   useSetImportant,
+  useScripts,
   useSetReadState,
   useTrashItem,
 } from '../data/queries.ts'
@@ -52,12 +55,21 @@ function savedAgo(iso: string): string {
 export function ItemList({ userId, collectionId, collectionName, onOpenCollection }: Props) {
   const items = useItems(collectionId)
   const collections = useCollections()
+  const sortScripts = useScripts('sort')
   const createItem = useCreateItem()
   const findExisting = useFindExistingItem()
 
   const [url, setUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [duplicate, setDuplicate] = useState<Duplicate | null>(null)
+  // The choice lives here for now. Where it belongs is on the folder's view,
+  // which is the next piece of work; keeping it in the component until then is
+  // better than inventing a second place to store it.
+  const [sortScriptId, setSortScriptId] = useState<string | null>(null)
+
+  const sortScript: ScriptRow | null =
+    sortScripts.data?.find((script) => script.id === sortScriptId) ?? null
+  const sorted = useSortedItems(items.data, sortScript)
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -141,7 +153,38 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
         </p>
       )}
 
-      <div className="mt-6">
+      <div className="mt-6 flex items-center justify-between gap-3">
+        <p className="text-xs text-muted">
+          {items.data === undefined
+            ? ''
+            : `${items.data.length} ${items.data.length === 1 ? 'scrap' : 'scraps'}`}
+          {sorted.running && ' · sorting…'}
+        </p>
+        <label className="flex items-center gap-2 text-xs text-muted">
+          Sort
+          <select
+            value={sortScriptId ?? ''}
+            onChange={(event) => setSortScriptId(event.target.value === '' ? null : event.target.value)}
+            className="rounded-md border border-line bg-surface px-2 py-1 text-ink"
+          >
+            <option value="">Newest first</option>
+            {sortScripts.data?.map((script) => (
+              <option key={script.id} value={script.id}>
+                {script.name}
+                {script.is_builtin ? '' : ' (yours)'}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {sorted.error !== null && (
+        <p className="mt-2 text-sm text-accent">
+          That sort script did not run: {sorted.error} Showing newest first instead.
+        </p>
+      )}
+
+      <div className="mt-3">
         {items.isPending && <p className="text-sm text-muted">Loading…</p>}
         {items.isError && (
           <p className="text-sm text-accent">Could not load this folder. {String(items.error)}</p>
@@ -149,7 +192,7 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
         {items.data?.length === 0 && <p className="text-sm text-muted">Nothing saved here yet.</p>}
 
         <ul className="divide-y divide-line">
-          {items.data?.map((item) => (
+          {sorted.items.map((item) => (
             <ItemRowView key={item.id} item={item} collectionId={collectionId} />
           ))}
         </ul>

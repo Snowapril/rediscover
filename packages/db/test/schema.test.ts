@@ -171,6 +171,50 @@ describe('constraints', () => {
   })
 })
 
+describe('built-in scripts', () => {
+  it('ships sort and group scripts owned by nobody', async () => {
+    // Ordering an enum column follows the order the type declares, not the
+    // alphabet, so the counts are compared as a map rather than a list.
+    const result = await db.pg.query<{ kind: string; count: number }>(
+      `select kind, count(*)::int as count from scripts
+       where is_builtin and user_id is null group by kind`,
+    )
+    expect(Object.fromEntries(result.rows.map((row) => [row.kind, row.count]))).toEqual({
+      sort: 7,
+      group: 3,
+    })
+  })
+
+  it('lets every user read them and no user write them', async () => {
+    const readable = await db.asUser(bob, async (pg) => {
+      const result = await pg.query<{ name: string }>('select name from scripts where is_builtin')
+      return result.rows.length
+    })
+    expect(readable).toBe(10)
+
+    const changed = await db.asUser(bob, (pg) =>
+      pg.query(`update scripts set source = 'stolen' where is_builtin`),
+    )
+    expect(changed.affectedRows).toBe(0)
+  })
+
+  it('exports the function the engine will look for', async () => {
+    // A sort script is asked for key(); only a group script is asked for its
+    // own name. A seeded script exporting the wrong one would fail silently at
+    // the point someone selects it.
+    const expectedExport: Record<string, string> = { sort: 'key', group: 'group' }
+    const result = await db.pg.query<{ name: string; kind: string; source: string }>(
+      'select name, kind, source from scripts where is_builtin',
+    )
+    expect(result.rows.length).toBeGreaterThan(0)
+    for (const row of result.rows) {
+      expect(row.source, `${row.kind} script "${row.name}"`).toContain(
+        `export function ${expectedExport[row.kind]}(`,
+      )
+    }
+  })
+})
+
 describe('merging folders', () => {
   async function folder(userId: string, name: string, parentId: string | null = null) {
     const result = await db.pg.query<{ id: string }>(
@@ -324,7 +368,7 @@ describe('row level security', () => {
       const result = await pg.query<{ name: string }>('select name from scripts where is_builtin')
       return result.rows.map((row) => row.name)
     })
-    expect(readable).toEqual(['Newest first'])
+    expect(readable).toContain('Newest first')
 
     await expect(
       db.asUser(bob, (pg) =>

@@ -9,7 +9,7 @@ import {
   useSetImportant,
   useSetReadState,
   useTrashItem,
-} from '../data/queries.js'
+} from '../data/queries.ts'
 
 interface Props {
   userId: string

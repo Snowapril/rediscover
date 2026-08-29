@@ -62,6 +62,26 @@ export async function createItem(
 }
 
 /*
+ * @brief The little of every scrap that the folder overview needs.
+ * @details Fetches the whole library rather than one request per folder, but
+ *   only three columns of it, because the overview has to count and illustrate
+ *   every folder at once. Should a library grow large enough for this to hurt,
+ *   the counting belongs in the database instead.
+ * @param client A signed-in client.
+ * @return One row per live scrap.
+ */
+export async function listItemSummaries(
+  client: RediscoverClient,
+): Promise<{ collection_id: string | null; thumbnail_url: string | null; created_at: string }[]> {
+  return unwrap(
+    await client
+      .from('items')
+      .select('collection_id, thumbnail_url, created_at')
+      .is('deleted_at', null),
+  )
+}
+
+/*
  * @brief Find the live scrap that already holds a URL, if there is one.
  * @details Compares canonical forms, so a link that differs only by tracking
  *   parameters still matches. Used to say where a duplicate already lives

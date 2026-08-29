@@ -121,3 +121,136 @@ export function nextPosition(siblings: readonly CollectionInput[]): number {
   }
   return highest + 1
 }
+
+/*
+ * @brief A position that sorts between two siblings.
+ * @details Ordering is fractional so a folder can be dropped between two others
+ *   without renumbering the rest. Repeatedly inserting into the same gap halves
+ *   it each time; at roughly fifty consecutive splits a double runs out of
+ *   precision and the two positions collide, at which point the siblings need
+ *   renumbering. Ties fall back to name then id, so a collision misorders rather
+ *   than corrupts.
+ * @param before The sibling the folder lands after, or null for the first slot.
+ * @param after The sibling the folder lands before, or null for the last slot.
+ * @return The position to store.
+ */
+export function positionBetween(before: number | null, after: number | null): number {
+  if (before === null && after === null) return 0
+  if (before === null) return (after as number) - 1
+  if (after === null) return before + 1
+  return (before + after) / 2
+}
+
+/*
+ * @brief Whether a folder may be moved under a new parent.
+ * @details A folder cannot be filed inside itself or inside its own descendant,
+ *   which the database also refuses; checking here means the drop is never
+ *   offered in the first place.
+ * @param roots The folder tree.
+ * @param sourceId The folder being moved.
+ * @param targetParentId The proposed parent, or null for the top level.
+ * @return True if the move is allowed.
+ */
+export function canMoveCollection<T extends CollectionInput>(
+  roots: readonly CollectionNode<T>[],
+  sourceId: string,
+  targetParentId: string | null,
+): boolean {
+  if (targetParentId === null) return true
+  if (targetParentId === sourceId) return false
+
+  const find = (nodes: readonly CollectionNode<T>[]): CollectionNode<T> | null => {
+    for (const node of nodes) {
+      if (node.collection.id === sourceId) return node
+      const found = find(node.children)
+      if (found !== null) return found
+    }
+    return null
+  }
+
+  const source = find(roots)
+  if (source === null) return true
+  return !collectSubtreeIds(source).has(targetParentId)
+}
+
+/*
+ * @brief What a folder holds, for showing it without opening it.
+ */
+export interface CollectionSummary {
+  /*
+   * @brief Scraps filed directly in this folder.
+   */
+  directItems: number
+  /*
+   * @brief Scraps in this folder and every folder beneath it.
+   */
+  totalItems: number
+  /*
+   * @brief A few thumbnails drawn from the folder and its descendants, newest first.
+   */
+  thumbnails: string[]
+}
+
+/*
+ * @brief The fields of a scrap a folder summary is built from.
+ */
+export interface SummarizableItem {
+  collectionId: string | null
+  thumbnailUrl: string | null
+  createdAt: number
+}
+
+/*
+ * @brief Count each folder's scraps and pick thumbnails to represent it.
+ * @details Counts and thumbnails include descendants, so a folder holding only
+ *   subfolders still shows what is under it rather than reading as empty.
+ *   Thumbnails are the most recently saved, deduplicated so a repeated image
+ *   does not fill the set.
+ * @param roots The folder tree.
+ * @param items Every scrap the user owns.
+ * @param limit How many thumbnails a folder may show.
+ * @return A summary per folder, keyed by folder id.
+ */
+export function summarizeCollections<T extends CollectionInput>(
+  roots: readonly CollectionNode<T>[],
+  items: readonly SummarizableItem[],
+  limit: number,
+): Map<string, CollectionSummary> {
+  const direct = new Map<string, SummarizableItem[]>()
+  for (const item of items) {
+    if (item.collectionId === null) continue
+    const bucket = direct.get(item.collectionId)
+    if (bucket === undefined) direct.set(item.collectionId, [item])
+    else bucket.push(item)
+  }
+
+  const summaries = new Map<string, CollectionSummary>()
+
+  const visit = (node: CollectionNode<T>): SummarizableItem[] => {
+    const own = direct.get(node.collection.id) ?? []
+    const subtree = [...own]
+    for (const child of node.children) subtree.push(...visit(child))
+
+    subtree.sort((a, b) => b.createdAt - a.createdAt)
+
+    const thumbnails: string[] = []
+    const seen = new Set<string>()
+    for (const item of subtree) {
+      if (thumbnails.length >= limit) break
+      const url = item.thumbnailUrl
+      if (url === null || seen.has(url)) continue
+      seen.add(url)
+      thumbnails.push(url)
+    }
+
+    summaries.set(node.collection.id, {
+      directItems: own.length,
+      totalItems: subtree.length,
+      thumbnails,
+    })
+    return subtree
+  }
+
+  for (const root of roots) visit(root)
+  return summaries
+}

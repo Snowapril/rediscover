@@ -1,46 +1,81 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type DragEvent } from 'react'
 import {
   buildCollectionTree,
+  canMoveCollection,
   flattenCollectionTree,
   nextPosition,
+  positionBetween,
   type CollectionNode,
 } from '@rediscover/core'
 import { toCollectionInput, type CollectionRow } from '@rediscover/api-client'
-import { useCreateCollection, useDeleteCollection, useRenameCollection } from '../data/queries.js'
+import {
+  useCreateCollection,
+  useDeleteCollection,
+  useMoveCollection,
+  useRenameCollection,
+} from '../data/queries.ts'
+import type { View } from '../view.ts'
 
 type TreeEntry = ReturnType<typeof toCollectionInput>
+
+/*
+ * @brief Where a dragged folder would land relative to the row under the cursor.
+ */
+type DropMode = 'before' | 'inside' | 'after'
+
+interface DropTarget {
+  id: string
+  mode: DropMode
+}
 
 interface Props {
   userId: string
   collections: CollectionRow[]
-  selectedId: string | null
-  onSelect(id: string | null): void
+  view: View
+  onSelect(view: View): void
 }
 
-const rowBase =
-  'group flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-left text-sm'
+const rowBase = 'group flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-left text-sm'
 
 /*
- * @brief The folder sidebar.
- * @details Renaming happens in place and deleting asks once in the row itself,
- *   rather than through window.prompt or window.confirm, which block the page.
- * @param userId Owner of any collection created here.
- * @param collections Every collection the user owns, unordered.
- * @param selectedId The collection being viewed, or null for the inbox.
- * @param onSelect Called with the collection to view.
+ * @brief Which third of a row the cursor is in.
+ * @details The middle two thirds file the folder inside the row; the outer
+ *   slivers place it before or after as a sibling, which is the only way to
+ *   express reordering with a single pointer.
+ * @param event The drag event over the row.
+ * @return The drop this position means.
  */
-export function CollectionTree({ userId, collections, selectedId, onSelect }: Props) {
+function dropModeFor(event: DragEvent<HTMLElement>): DropMode {
+  const box = event.currentTarget.getBoundingClientRect()
+  const offset = (event.clientY - box.top) / box.height
+  if (offset < 0.25) return 'before'
+  if (offset > 0.75) return 'after'
+  return 'inside'
+}
+
+export function CollectionTree({ userId, collections, view, onSelect }: Props) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const [renaming, setRenaming] = useState<string | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
 
   const createCollection = useCreateCollection()
   const renameCollection = useRenameCollection()
   const deleteCollection = useDeleteCollection()
+  const moveCollection = useMoveCollection()
 
   const entries = useMemo(() => collections.map(toCollectionInput), [collections])
   const roots = useMemo(() => buildCollectionTree(entries), [entries])
   const rows = useMemo(() => flattenCollectionTree(roots, expanded), [roots, expanded])
+
+  const selectedId = view.kind === 'collection' ? view.id : null
+
+  function siblingsOf(parentId: string | null): TreeEntry[] {
+    return entries
+      .filter((entry) => entry.parentId === parentId)
+      .sort((a, b) => a.position - b.position)
+  }
 
   function toggle(id: string) {
     setExpanded((current) => {
@@ -52,9 +87,8 @@ export function CollectionTree({ userId, collections, selectedId, onSelect }: Pr
   }
 
   function addChild(parentId: string | null) {
-    const siblings = entries.filter((entry) => entry.parentId === parentId)
     createCollection.mutate(
-      { userId, parentId, name: 'New folder', position: nextPosition(siblings) },
+      { userId, parentId, name: 'New folder', position: nextPosition(siblingsOf(parentId)) },
       {
         onSuccess: (created) => {
           if (parentId !== null) setExpanded((current) => new Set(current).add(parentId))
@@ -64,20 +98,73 @@ export function CollectionTree({ userId, collections, selectedId, onSelect }: Pr
     )
   }
 
+  /*
+   * @brief The parent a drop would file the folder under.
+   */
+  function parentForDrop(target: DropTarget): string | null {
+    if (target.mode === 'inside') return target.id
+    return entries.find((entry) => entry.id === target.id)?.parentId ?? null
+  }
+
+  function allowsDrop(target: DropTarget): boolean {
+    if (dragId === null) return false
+    if (target.id === dragId) return false
+    return canMoveCollection(roots, dragId, parentForDrop(target))
+  }
+
+  function handleDrop(target: DropTarget) {
+    setDropTarget(null)
+    if (dragId === null || !allowsDrop(target)) return
+
+    const parentId = parentForDrop(target)
+    let position: number
+
+    if (target.mode === 'inside') {
+      position = nextPosition(siblingsOf(target.id))
+    } else {
+      // Ordering is computed against the siblings the folder is joining, with
+      // the folder itself removed so dropping it next to where it already sits
+      // does not measure the gap against itself.
+      const siblings = siblingsOf(parentId).filter((entry) => entry.id !== dragId)
+      const index = siblings.findIndex((entry) => entry.id === target.id)
+      const slot = target.mode === 'before' ? index : index + 1
+      position = positionBetween(
+        slot > 0 ? (siblings[slot - 1]?.position ?? null) : null,
+        siblings[slot]?.position ?? null,
+      )
+    }
+
+    moveCollection.mutate({ id: dragId, parentId, position })
+    if (parentId !== null) setExpanded((current) => new Set(current).add(parentId))
+    setDragId(null)
+  }
+
   return (
     <nav className="flex h-full flex-col gap-4">
       <ul className="space-y-0.5">
         <li>
           <button
             type="button"
-            onClick={() => onSelect(null)}
-            className={`${rowBase} ${selectedId === null ? 'bg-line font-medium' : 'hover:bg-line/60'}`}
+            onClick={() => onSelect({ kind: 'inbox' })}
+            className={`${rowBase} ${view.kind === 'inbox' ? 'bg-line font-medium' : 'hover:bg-line/60'}`}
           >
             <span className="w-4 shrink-0" aria-hidden="true" />
             <span className="truncate">Inbox</span>
           </button>
         </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => onSelect({ kind: 'folders' })}
+            className={`${rowBase} ${view.kind === 'folders' ? 'bg-line font-medium' : 'hover:bg-line/60'}`}
+          >
+            <span className="w-4 shrink-0" aria-hidden="true" />
+            <span className="truncate">All folders</span>
+          </button>
+        </li>
+      </ul>
 
+      <ul className="space-y-0.5 border-t border-line pt-3">
         {rows.map((node) => (
           <CollectionRow
             key={node.collection.id}
@@ -86,7 +173,9 @@ export function CollectionTree({ userId, collections, selectedId, onSelect }: Pr
             expanded={expanded.has(node.collection.id)}
             renaming={renaming === node.collection.id}
             confirmingDelete={confirmingDelete === node.collection.id}
-            onSelect={() => onSelect(node.collection.id)}
+            dragging={dragId === node.collection.id}
+            dropMode={dropTarget?.id === node.collection.id ? dropTarget.mode : null}
+            onSelect={() => onSelect({ kind: 'collection', id: node.collection.id })}
             onToggle={() => toggle(node.collection.id)}
             onStartRename={() => setRenaming(node.collection.id)}
             onRename={(name) => {
@@ -103,6 +192,25 @@ export function CollectionTree({ userId, collections, selectedId, onSelect }: Pr
               deleteCollection.mutate(node.collection.id)
             }}
             onAddChild={() => addChild(node.collection.id)}
+            onDragStart={() => setDragId(node.collection.id)}
+            onDragEnd={() => {
+              setDragId(null)
+              setDropTarget(null)
+            }}
+            onDragOver={(event) => {
+              const target: DropTarget = { id: node.collection.id, mode: dropModeFor(event) }
+              if (!allowsDrop(target)) {
+                setDropTarget(null)
+                return
+              }
+              event.preventDefault()
+              setDropTarget(target)
+            }}
+            onDragLeave={() => setDropTarget(null)}
+            onDrop={(event) => {
+              event.preventDefault()
+              handleDrop({ id: node.collection.id, mode: dropModeFor(event) })
+            }}
           />
         ))}
       </ul>
@@ -124,6 +232,8 @@ interface RowProps {
   expanded: boolean
   renaming: boolean
   confirmingDelete: boolean
+  dragging: boolean
+  dropMode: DropMode | null
   onSelect(): void
   onToggle(): void
   onStartRename(): void
@@ -132,16 +242,37 @@ interface RowProps {
   onCancelDelete(): void
   onConfirmDelete(): void
   onAddChild(): void
+  onDragStart(): void
+  onDragEnd(): void
+  onDragOver(event: DragEvent<HTMLElement>): void
+  onDragLeave(): void
+  onDrop(event: DragEvent<HTMLElement>): void
 }
 
 function CollectionRow(props: RowProps) {
-  const { node, selected, expanded, renaming, confirmingDelete } = props
+  const { node, selected, expanded, renaming, confirmingDelete, dragging, dropMode } = props
   const hasChildren = node.children.length > 0
+
+  const dropRing = dropMode === 'inside' ? 'ring-1 ring-accent' : ''
+  const dropEdge =
+    dropMode === 'before'
+      ? 'before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-accent'
+      : dropMode === 'after'
+        ? 'after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-accent'
+        : ''
 
   return (
     <li style={{ paddingLeft: `${node.depth * 0.85}rem` }}>
       <div
-        className={`${rowBase} ${selected ? 'bg-line font-medium' : 'hover:bg-line/60'}`}
+        draggable={!renaming}
+        onDragStart={props.onDragStart}
+        onDragEnd={props.onDragEnd}
+        onDragOver={props.onDragOver}
+        onDragLeave={props.onDragLeave}
+        onDrop={props.onDrop}
+        className={`relative ${rowBase} ${dropRing} ${dropEdge} ${dragging ? 'opacity-40' : ''} ${
+          selected ? 'bg-line font-medium' : 'hover:bg-line/60'
+        }`}
       >
         {hasChildren ? (
           <button

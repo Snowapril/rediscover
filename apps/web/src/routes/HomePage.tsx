@@ -1,16 +1,18 @@
 import { useState } from 'react'
-import { useAuth } from '../auth/useAuth.js'
-import { useCollections } from '../data/queries.js'
-import { CollectionTree } from '../components/CollectionTree.js'
-import { ItemList } from '../components/ItemList.js'
+import { useAuth } from '../auth/useAuth.ts'
+import { useCollections } from '../data/queries.ts'
+import { CollectionTree } from '../components/CollectionTree.tsx'
+import { FolderMap } from '../components/FolderMap.tsx'
+import { ItemList } from '../components/ItemList.tsx'
+import { viewCollectionId, type View } from '../view.ts'
 
 /*
- * @brief The signed-in shell: folders on the left, their scraps on the right.
+ * @brief The signed-in shell: navigation on the left, the chosen view on the right.
  */
 export function HomePage() {
   const { session, signOut } = useAuth()
   const collections = useCollections()
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [view, setView] = useState<View>({ kind: 'inbox' })
 
   const userId = session?.user.id
 
@@ -19,9 +21,13 @@ export function HomePage() {
   // trusted. Only once they have loaded — until then an unknown id is not yet
   // known to be missing.
   const loaded = collections.data !== undefined
-  const selected = collections.data?.find((collection) => collection.id === selectedId)
-  const viewingId = loaded && selected === undefined ? null : selectedId
-  const collectionName = viewingId === null ? 'Inbox' : (selected?.name ?? 'Folder')
+  const selected =
+    view.kind === 'collection'
+      ? collections.data?.find((collection) => collection.id === view.id)
+      : undefined
+  const current: View = loaded && view.kind === 'collection' && selected === undefined
+    ? { kind: 'inbox' }
+    : view
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -47,21 +53,26 @@ export function HomePage() {
             <CollectionTree
               userId={userId}
               collections={collections.data ?? []}
-              selectedId={viewingId}
-              onSelect={setSelectedId}
+              view={current}
+              onSelect={setView}
             />
           )}
         </aside>
 
         <main className="min-w-0 flex-1">
-          {userId !== undefined && (
-            <ItemList
-              userId={userId}
-              collectionId={viewingId}
-              collectionName={collectionName}
-              onOpenCollection={setSelectedId}
-            />
-          )}
+          {userId !== undefined &&
+            (current.kind === 'folders' ? (
+              <FolderMap collections={collections.data ?? []} onOpen={setView} />
+            ) : (
+              <ItemList
+                userId={userId}
+                collectionId={viewCollectionId(current)}
+                collectionName={current.kind === 'inbox' ? 'Inbox' : (selected?.name ?? 'Folder')}
+                onOpenCollection={(id) =>
+                  setView(id === null ? { kind: 'inbox' } : { kind: 'collection', id })
+                }
+              />
+            ))}
         </main>
       </div>
     </div>

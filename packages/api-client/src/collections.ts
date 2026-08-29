@@ -64,6 +64,28 @@ export async function renameCollection(
 }
 
 /*
+ * @brief File a collection under a new parent, at a given place among its siblings.
+ * @details Position is fractional, so reordering touches one row rather than
+ *   renumbering the whole level. The database refuses a move that would make a
+ *   folder its own ancestor; canMoveCollection in @rediscover/core answers the
+ *   same question up front so the drop is never offered.
+ * @param client A signed-in client.
+ * @param id The collection to move.
+ * @param parentId Its new parent, or null for the top level.
+ * @param position Where it sits among its new siblings.
+ */
+export async function moveCollection(
+  client: RediscoverClient,
+  id: string,
+  parentId: string | null,
+  position: number,
+): Promise<void> {
+  unwrapVoid(
+    await client.from('collections').update({ parent_id: parentId, position }).eq('id', id),
+  )
+}
+
+/*
  * @brief Delete a collection and everything nested under it.
  * @details Child collections are removed with it, and the scraps of the whole
  *   subtree are moved to the trash by a database trigger. They are trashed

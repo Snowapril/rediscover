@@ -6,7 +6,9 @@ import {
   extractIntoItem,
   findLiveItemByUrl,
   listCollections,
+  listItemSummaries,
   listItems,
+  moveCollection,
   renameCollection,
   setImportant,
   setReadState,
@@ -15,7 +17,7 @@ import {
   type ItemRow,
 } from '@rediscover/api-client'
 import type { ReadState } from '@rediscover/core'
-import { supabase } from '../supabase.js'
+import { supabase } from '../supabase.ts'
 
 const COLLECTIONS_KEY = ['collections'] as const
 
@@ -55,6 +57,25 @@ export function useCreateCollection() {
   })
 }
 
+/*
+ * @brief Every live scrap reduced to what the folder overview needs.
+ */
+export function useItemSummaries() {
+  return useQuery({
+    queryKey: ['item-summaries'],
+    queryFn: () => listItemSummaries(supabase),
+  })
+}
+
+export function useMoveCollection() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; parentId: string | null; position: number }) =>
+      moveCollection(supabase, input.id, input.parentId, input.position),
+    onSuccess: () => client.invalidateQueries({ queryKey: COLLECTIONS_KEY }),
+  })
+}
+
 export function useRenameCollection() {
   const client = useQueryClient()
   return useMutation({
@@ -76,6 +97,7 @@ export function useDeleteCollection() {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: COLLECTIONS_KEY })
       void client.invalidateQueries({ queryKey: ['items'] })
+      void client.invalidateQueries({ queryKey: ['item-summaries'] })
     },
   })
 }
@@ -94,8 +116,10 @@ export function useCreateItem() {
       createItem(supabase, input),
     onSuccess: (item, input) => {
       void client.invalidateQueries({ queryKey: itemsKey(input.collectionId) })
+      void client.invalidateQueries({ queryKey: ['item-summaries'] })
       void extractIntoItem(supabase, item).finally(() => {
         void client.invalidateQueries({ queryKey: itemsKey(input.collectionId) })
+        void client.invalidateQueries({ queryKey: ['item-summaries'] })
       })
     },
   })
@@ -144,6 +168,9 @@ export function useTrashItem(collectionId: string | null) {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => trashItem(supabase, id),
-    onSuccess: () => client.invalidateQueries({ queryKey: itemsKey(collectionId) }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: itemsKey(collectionId) })
+      void client.invalidateQueries({ queryKey: ['item-summaries'] })
+    },
   })
 }

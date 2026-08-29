@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "rediscover",
+  "version": "0.0.1",
+  "description": "Save a page to rediscover, with its title, excerpt and cover read from the page you are actually looking at.",
+  "action": {
+    "default_title": "Save to rediscover",
+    "default_popup": "popup.html"
+  },
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["http://127.0.0.1:54321/*"],
+  "content_scripts": [
+    {
+      "matches": ["http://127.0.0.1:5173/*"],
+      "js": ["connect.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

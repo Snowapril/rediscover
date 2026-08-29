@@ -15,4 +15,9 @@ export default tseslint.config(
     files: ['**/test/**/*.ts'],
     rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
   },
+  {
+    // Build steps that run under Node rather than in a browser or a worker.
+    files: ['**/scripts/**/*.js'],
+    languageOptions: { globals: { console: 'readonly', process: 'readonly' } },
+  },
 )

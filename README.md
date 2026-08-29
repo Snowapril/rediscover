@@ -7,9 +7,9 @@ treats reading as the thing worth tracking: whether an item has been read is a f
 property, a reminder can pull a forgotten item back to the surface, and each folder is
 sorted by a script you write and that follows your account to every device.
 
-Status: early. The schema, the local development stack, and email sign in exist. The
-collection tree, item list, metadata extraction, the script engine, the browser extension,
-and the desktop and mobile clients do not yet.
+Status: early. The schema, email sign in, the folder tree, the item list, metadata
+extraction, CSV import, and the Chrome extension exist. The per-folder sort scripts,
+reminders, and the desktop and mobile clients do not yet.
 
 ## Layout
 
@@ -19,6 +19,7 @@ and the desktop and mobile clients do not yet.
 | `packages/db` | Postgres schema, row level security policies, and an in-process test harness |
 | `packages/api-client` | Supabase client typed against the generated schema |
 | `apps/web` | Vite and React web client |
+| `apps/extension` | Chrome MV3 extension for one-click saving |
 | `supabase/` | Migrations, local stack configuration, edge functions |
 
 ## Running it locally
@@ -35,6 +36,22 @@ npm run dev --workspace @rediscover/web
 
 The app is then at http://127.0.0.1:5173 and Supabase Studio at http://127.0.0.1:54323.
 Sign in with any email and password; the local stack does not send confirmation mail.
+
+## The browser extension
+
+```sh
+cp apps/extension/.env.example apps/extension/.env.local
+npm run build --workspace @rediscover/extension
+```
+
+Then open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**,
+and pick `apps/extension/dist`.
+
+Sign in on the web app once. The extension asks the page for the session and keeps
+it, so there is no second sign-in. Clicking the toolbar button saves the current
+tab to your inbox and reads its title, excerpt and cover from the page as the
+browser has rendered it — which is how it reaches pages behind a login or built by
+script, where a server-side fetch sees nothing.
 
 ## Checks
 

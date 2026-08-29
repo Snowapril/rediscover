@@ -171,6 +171,95 @@ describe('constraints', () => {
   })
 })
 
+describe('views', () => {
+  it('lets the inbox have views, not only folders', async () => {
+    await expect(
+      db.pg.query(`insert into views (user_id, collection_id, name) values ($1, null, 'Unread')`, [
+        alice,
+      ]),
+    ).resolves.toBeTruthy()
+  })
+
+  it('refuses two views with the same name in one folder', async () => {
+    const folder = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Reading') returning id`,
+      [alice],
+    )
+    const folderId = folder.rows[0]!.id
+
+    await db.pg.query(`insert into views (user_id, collection_id, name) values ($1, $2, 'All')`, [
+      alice,
+      folderId,
+    ])
+    await expect(
+      db.pg.query(`insert into views (user_id, collection_id, name) values ($1, $2, 'all')`, [
+        alice,
+        folderId,
+      ]),
+    ).rejects.toThrow()
+  })
+
+  it('lets two folders each have a view of the same name', async () => {
+    const first = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'One') returning id`,
+      [alice],
+    )
+    const second = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Two') returning id`,
+      [alice],
+    )
+    await db.pg.query(`insert into views (user_id, collection_id, name) values ($1, $2, 'Recent')`, [
+      alice,
+      first.rows[0]!.id,
+    ])
+    await expect(
+      db.pg.query(`insert into views (user_id, collection_id, name) values ($1, $2, 'Recent')`, [
+        alice,
+        second.rows[0]!.id,
+      ]),
+    ).resolves.toBeTruthy()
+  })
+
+  it("refuses a view pointing at another user's folder", async () => {
+    const theirs = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Theirs') returning id`,
+      [bob],
+    )
+    await expect(
+      db.pg.query(`insert into views (user_id, collection_id, name) values ($1, $2, 'Sneaky')`, [
+        alice,
+        theirs.rows[0]!.id,
+      ]),
+    ).rejects.toThrow()
+  })
+
+  it('goes when its folder does, without taking the scraps', async () => {
+    const folder = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Doomed') returning id`,
+      [alice],
+    )
+    const folderId = folder.rows[0]!.id
+    await db.pg.query(`insert into views (user_id, collection_id, name) values ($1, $2, 'All')`, [
+      alice,
+      folderId,
+    ])
+    const scrap = await insertItem(alice, 'https://example.com/view-folder', folderId)
+
+    await db.pg.query('delete from collections where id = $1', [folderId])
+
+    const views = await db.pg.query<{ count: number }>(
+      'select count(*)::int as count from views where collection_id = $1',
+      [folderId],
+    )
+    expect(views.rows[0]!.count).toBe(0)
+    const item = await db.pg.query<{ count: number }>(
+      'select count(*)::int as count from items where id = $1',
+      [scrap],
+    )
+    expect(item.rows[0]!.count).toBe(1)
+  })
+})
+
 describe('built-in scripts', () => {
   it('ships sort and group scripts owned by nobody', async () => {
     // Ordering an enum column follows the order the type declares, not the

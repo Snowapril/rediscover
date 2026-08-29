@@ -398,7 +398,7 @@ export type Database = {
       }
       views: {
         Row: {
-          collection_id: string
+          collection_id: string | null
           created_at: string
           filter: Json
           group_script_id: string | null
@@ -412,7 +412,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          collection_id: string
+          collection_id?: string | null
           created_at?: string
           filter?: Json
           group_script_id?: string | null
@@ -426,7 +426,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          collection_id?: string
+          collection_id?: string | null
           created_at?: string
           filter?: Json
           group_script_id?: string | null

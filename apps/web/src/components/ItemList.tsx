@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import type { ItemRow } from '@rediscover/api-client'
-import type { ScriptRow } from '@rediscover/api-client'
-import { useSortedItems } from '../data/useSortedItems.ts'
+import { DEFAULT_VIEW, settingsOf, type ViewSettings } from '@rediscover/api-client'
+import { useViewItems } from '../data/useViewItems.ts'
+import { ViewBar } from './ViewBar.tsx'
 import {
   useCollections,
   useCreateItem,
@@ -9,9 +10,13 @@ import {
   useItems,
   useRetryExtraction,
   useSetImportant,
+  useCreateView,
+  useDeleteView,
   useScripts,
   useSetReadState,
   useTrashItem,
+  useUpdateView,
+  useViews,
 } from '../data/queries.ts'
 
 interface Props {
@@ -56,20 +61,41 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
   const items = useItems(collectionId)
   const collections = useCollections()
   const sortScripts = useScripts('sort')
+  const groupScripts = useScripts('group')
+  const views = useViews(collectionId)
   const createItem = useCreateItem()
   const findExisting = useFindExistingItem()
+  const createView = useCreateView(collectionId)
+  const updateView = useUpdateView(collectionId)
+  const deleteView = useDeleteView(collectionId)
 
   const [url, setUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [duplicate, setDuplicate] = useState<Duplicate | null>(null)
-  // The choice lives here for now. Where it belongs is on the folder's view,
-  // which is the next piece of work; keeping it in the component until then is
-  // better than inventing a second place to store it.
-  const [sortScriptId, setSortScriptId] = useState<string | null>(null)
+  const [chosenViewId, setChosenViewId] = useState<string | null>(null)
 
-  const sortScript: ScriptRow | null =
-    sortScripts.data?.find((script) => script.id === sortScriptId) ?? null
-  const sorted = useSortedItems(items.data, sortScript)
+  // Falling back to the first view rather than remembering one per folder means
+  // moving between folders never lands on a view that belongs to another.
+  const savedViews = views.data ?? []
+  const activeView =
+    savedViews.find((view) => view.id === chosenViewId) ?? savedViews[0] ?? null
+  const settings = activeView === null ? DEFAULT_VIEW : settingsOf(activeView)
+
+  const allScripts = [...(sortScripts.data ?? []), ...(groupScripts.data ?? [])]
+  const arranged = useViewItems(items.data, settings, allScripts)
+
+  function changeView(patch: Partial<ViewSettings>) {
+    if (activeView !== null) {
+      updateView.mutate({ id: activeView.id, settings: patch })
+      return
+    }
+    // Nothing was saved for this folder yet, so the first change is what turns
+    // the default into a view of its own.
+    createView.mutate(
+      { userId, collectionId, name: 'Default', position: 0, ...settings, ...patch },
+      { onSuccess: (created) => setChosenViewId(created.id) },
+    )
+  }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -153,49 +179,57 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
         </p>
       )}
 
-      <div className="mt-6 flex items-center justify-between gap-3">
-        <p className="text-xs text-muted">
-          {items.data === undefined
-            ? ''
-            : `${items.data.length} ${items.data.length === 1 ? 'scrap' : 'scraps'}`}
-          {sorted.running && ' · sorting…'}
-        </p>
-        <label className="flex items-center gap-2 text-xs text-muted">
-          Sort
-          <select
-            value={sortScriptId ?? ''}
-            onChange={(event) => setSortScriptId(event.target.value === '' ? null : event.target.value)}
-            className="rounded-md border border-line bg-surface px-2 py-1 text-ink"
-          >
-            <option value="">Newest first</option>
-            {sortScripts.data?.map((script) => (
-              <option key={script.id} value={script.id}>
-                {script.name}
-                {script.is_builtin ? '' : ' (yours)'}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <ViewBar
+        views={savedViews}
+        activeId={activeView?.id ?? null}
+        settings={settings}
+        sortScripts={sortScripts.data ?? []}
+        groupScripts={groupScripts.data ?? []}
+        busy={arranged.running}
+        onSelect={setChosenViewId}
+        onChange={changeView}
+        onAdd={(name) =>
+          createView.mutate(
+            { userId, collectionId, name, position: savedViews.length, ...settings },
+            { onSuccess: (created) => setChosenViewId(created.id) },
+          )
+        }
+        onRemove={(id) => {
+          setChosenViewId(null)
+          deleteView.mutate(id)
+        }}
+      />
 
-      {sorted.error !== null && (
-        <p className="mt-2 text-sm text-accent">
-          That sort script did not run: {sorted.error} Showing newest first instead.
+      {arranged.error !== null && (
+        <p className="mt-3 text-sm text-accent">
+          This view&rsquo;s script did not run: {arranged.error} Showing the scraps unarranged.
         </p>
       )}
 
-      <div className="mt-3">
+      <div className="mt-4">
         {items.isPending && <p className="text-sm text-muted">Loading…</p>}
         {items.isError && (
           <p className="text-sm text-accent">Could not load this folder. {String(items.error)}</p>
         )}
         {items.data?.length === 0 && <p className="text-sm text-muted">Nothing saved here yet.</p>}
 
-        <ul className="divide-y divide-line">
-          {sorted.items.map((item) => (
-            <ItemRowView key={item.id} item={item} collectionId={collectionId} />
-          ))}
-        </ul>
+        {arranged.groups.map((group) => (
+          <section key={group.label} className={arranged.grouped ? 'mt-5 first:mt-0' : ''}>
+            {arranged.grouped && (
+              <h2 className="flex items-baseline gap-2 border-b border-line pb-1 text-xs font-medium uppercase tracking-wide text-muted">
+                {group.label}
+                <span className="font-normal normal-case tracking-normal">
+                  {group.items.length}
+                </span>
+              </h2>
+            )}
+            <ul className="divide-y divide-line">
+              {group.items.map((item) => (
+                <ItemRowView key={item.id} item={item} collectionId={collectionId} />
+              ))}
+            </ul>
+          </section>
+        ))}
       </div>
     </section>
   )

@@ -10,12 +10,16 @@ import {
   listItemSummaries,
   listItems,
   listScripts,
+  listViews,
   mergeCollection,
   moveCollection,
   renameCollection,
   setImportant,
   setReadState,
   trashItem,
+  updateView,
+  createView,
+  deleteView,
   type CollectionRow,
   type ImportProgress,
   type ItemRow,
@@ -115,6 +119,47 @@ export function useScripts(kind: 'sort' | 'group') {
     queryKey: ['scripts', kind],
     queryFn: () => listScripts(supabase, kind),
     staleTime: 5 * 60 * 1000,
+  })
+}
+
+function viewsKey(collectionId: string | null) {
+  return ['views', collectionId] as const
+}
+
+/*
+ * @brief The views saved for one folder.
+ * @details A folder with none shows an unsaved default; the first change made
+ *   to it is what creates a row.
+ */
+export function useViews(collectionId: string | null) {
+  return useQuery({
+    queryKey: viewsKey(collectionId),
+    queryFn: () => listViews(supabase, collectionId),
+  })
+}
+
+export function useCreateView(collectionId: string | null) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: Parameters<typeof createView>[1]) => createView(supabase, input),
+    onSuccess: () => client.invalidateQueries({ queryKey: viewsKey(collectionId) }),
+  })
+}
+
+export function useUpdateView(collectionId: string | null) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; settings: Parameters<typeof updateView>[2] }) =>
+      updateView(supabase, input.id, input.settings),
+    onSuccess: () => client.invalidateQueries({ queryKey: viewsKey(collectionId) }),
+  })
+}
+
+export function useDeleteView(collectionId: string | null) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => deleteView(supabase, id),
+    onSuccess: () => client.invalidateQueries({ queryKey: viewsKey(collectionId) }),
   })
 }
 

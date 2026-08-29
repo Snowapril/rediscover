@@ -14,7 +14,30 @@ import { HARNESS } from './harness.ts'
  */
 export type SortKey = number | string | boolean | null | readonly SortKey[]
 
-export type ScriptOutcome<T> = { ok: true; values: T[] } | { ok: false; message: string }
+/*
+ * @brief One function a script may export, and what its values must look like.
+ */
+export interface ExportSpec {
+  name: string
+  /*
+   * @brief `sortKey` for a value to order by, `label` for a category name.
+   */
+  kind: 'sortKey' | 'label'
+  /*
+   * @brief Whether the script is wrong without it.
+   */
+  required: boolean
+}
+
+/*
+ * @brief What each requested export returned, keyed by its name.
+ * @details An export the script does not define is absent rather than empty, so
+ *   a caller can tell "the script has no categories" from "every scrap is
+ *   uncategorised".
+ */
+export type ExportValues = Record<string, unknown[]>
+
+export type ScriptOutcome<T> = { ok: true; values: T } | { ok: false; message: string }
 
 export interface RunLimits {
   /*
@@ -77,7 +100,7 @@ function loadQuickJS(): Promise<QuickJSWASMModule> {
 }
 
 /*
- * @brief Run one of a user script's exported functions over every scrap.
+ * @brief Run a user script's exported functions over every scrap.
  * @details The script is evaluated as a module in a fresh sandbox with no host
  *   bindings at all — no fetch, no timers, no module loader, nothing of the
  *   page it was launched from. It cannot reach the network or the database, so
@@ -88,17 +111,18 @@ function loadQuickJS(): Promise<QuickJSWASMModule> {
  *   these are somebody's own scripts being written and rewritten: a broken one
  *   should say what is wrong under the editor, not break the folder.
  * @param source The script the user wrote.
- * @param exportName The function to call, `key` or `group`.
- * @param items The scraps to run it over.
+ * @param exports The functions to call and what each must return.
+ * @param items The scraps to run them over.
  * @param limits Time and memory the script may use.
- * @return One value per scrap, in the order given, or why it could not be run.
+ * @return One value per scrap per export, in the order given, or why it could
+ *   not be run.
  */
-export async function runScript(
+export async function runExports(
   source: string,
-  exportName: string,
+  exports: readonly ExportSpec[],
   items: readonly ScriptItem[],
   limits: RunLimits = defaultLimitsFor(items.length),
-): Promise<ScriptOutcome<unknown>> {
+): Promise<ScriptOutcome<ExportValues>> {
   const quickJS = await loadQuickJS()
   const runtime = quickJS.newRuntime()
 
@@ -122,9 +146,7 @@ export async function runScript(
         return { ok: false, message }
       }
 
-      const exported = context.getProp(userModule.value, exportName)
-      context.setProp(context.global, '__exported', exported)
-      exported.dispose()
+      context.setProp(context.global, '__module', userModule.value)
       userModule.value.dispose()
 
       const json = context.newString(JSON.stringify(items))
@@ -138,10 +160,10 @@ export async function runScript(
       }
       prepared.value.dispose()
 
-      const name = context.newString(exportName)
+      const spec = context.newString(JSON.stringify(exports))
       const run = context.getProp(context.global, '__run')
-      const outcome = context.callFunction(run, context.undefined, name)
-      name.dispose()
+      const outcome = context.callFunction(run, context.undefined, spec)
+      spec.dispose()
       run.dispose()
 
       if (outcome.error !== undefined) {
@@ -153,9 +175,9 @@ export async function runScript(
       const raw = context.getString(outcome.value)
       outcome.value.dispose()
 
-      const parsed = JSON.parse(raw) as { values?: unknown[]; error?: string }
+      const parsed = JSON.parse(raw) as { results?: ExportValues; error?: string }
       if (parsed.error !== undefined) return { ok: false, message: parsed.error }
-      return { ok: true, values: parsed.values ?? [] }
+      return { ok: true, values: parsed.results ?? {} }
     } finally {
       context.dispose()
     }
@@ -192,4 +214,29 @@ function describeError(cause: unknown): string {
   }
 
   return 'The script could not be run.'
+}
+
+/*
+ * @brief Run one exported function, for callers that want only the one.
+ * @param source The script the user wrote.
+ * @param exportName The function to call.
+ * @param items The scraps to run it over.
+ * @param limits Time and memory the script may use.
+ * @return One value per scrap, or why it could not be run.
+ */
+export async function runScript(
+  source: string,
+  exportName: string,
+  items: readonly ScriptItem[],
+  limits: RunLimits = defaultLimitsFor(items.length),
+): Promise<ScriptOutcome<unknown[]>> {
+  const kind = exportName === 'key' ? 'sortKey' : 'label'
+  const outcome = await runExports(
+    source,
+    [{ name: exportName, kind, required: true }],
+    items,
+    limits,
+  )
+  if (!outcome.ok) return outcome
+  return { ok: true, values: outcome.values[exportName] ?? [] }
 }

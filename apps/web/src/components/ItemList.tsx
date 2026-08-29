@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import type { ItemRow } from '@rediscover/api-client'
 import { DEFAULT_VIEW, settingsOf, type ViewSettings } from '@rediscover/api-client'
 import { useViewItems } from '../data/useViewItems.ts'
+import { CategoryChips } from './CategoryChips.tsx'
 import { ViewBar } from './ViewBar.tsx'
 import {
   useCollections,
@@ -73,6 +74,7 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
   const [error, setError] = useState<string | null>(null)
   const [duplicate, setDuplicate] = useState<Duplicate | null>(null)
   const [chosenViewId, setChosenViewId] = useState<string | null>(null)
+  const [category, setCategory] = useState<string | null>(null)
 
   // Falling back to the first view rather than remembering one per folder means
   // moving between folders never lands on a view that belongs to another.
@@ -82,7 +84,7 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
   const settings = activeView === null ? DEFAULT_VIEW : settingsOf(activeView)
 
   const allScripts = [...(sortScripts.data ?? []), ...(groupScripts.data ?? [])]
-  const arranged = useViewItems(items.data, settings, allScripts)
+  const arranged = useViewItems(items.data, settings, allScripts, category)
 
   function changeView(patch: Partial<ViewSettings>) {
     if (activeView !== null) {
@@ -186,8 +188,16 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
         sortScripts={sortScripts.data ?? []}
         groupScripts={groupScripts.data ?? []}
         busy={arranged.running}
-        onSelect={setChosenViewId}
-        onChange={changeView}
+        onSelect={(id) => {
+          setChosenViewId(id)
+          setCategory(null)
+        }}
+        onChange={(patch) => {
+          // A category named by the previous script means nothing under the new
+          // one, so narrowing is dropped rather than silently emptying the list.
+          setCategory(null)
+          changeView(patch)
+        }}
         onAdd={(name) =>
           createView.mutate(
             { userId, collectionId, name, position: savedViews.length, ...settings },
@@ -198,6 +208,12 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
           setChosenViewId(null)
           deleteView.mutate(id)
         }}
+      />
+
+      <CategoryChips
+        categories={arranged.categories}
+        selected={category}
+        onSelect={setCategory}
       />
 
       {arranged.error !== null && (
@@ -214,8 +230,8 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
         {items.data?.length === 0 && <p className="text-sm text-muted">Nothing saved here yet.</p>}
 
         {arranged.groups.map((group) => (
-          <section key={group.label} className={arranged.grouped ? 'mt-5 first:mt-0' : ''}>
-            {arranged.grouped && (
+          <section key={group.label} className={group.label === '' ? '' : 'mt-5 first:mt-0'}>
+            {group.label !== '' && category === null && (
               <h2 className="flex items-baseline gap-2 border-b border-line pb-1 text-xs font-medium uppercase tracking-wide text-muted">
                 {group.label}
                 <span className="font-normal normal-case tracking-normal">

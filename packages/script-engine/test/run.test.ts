@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ScriptItem } from '@rediscover/core'
-import { defaultLimitsFor, runScript } from '../src/run.ts'
+import { defaultLimitsFor, runExports, runScript } from '../src/run.ts'
 
 function scrap(overrides: Partial<ScriptItem> = {}): ScriptItem {
   return {
@@ -197,5 +197,98 @@ describe('runScript', () => {
     // Still tight enough that a runaway script in a small folder is stopped
     // quickly rather than allowed a large folder's budget.
     expect(defaultLimitsFor(10).timeoutMs).toBeLessThan(500)
+  })
+})
+
+describe('runExports', () => {
+  const SORT_AND_CATEGORY = `
+    export function key(item) { return -item.createdAt }
+    export function category(item) { return item.readState === 'read' ? 'Read' : 'Unread' }
+  `
+
+  it('runs several exports in one pass', async () => {
+    const outcome = await runExports(
+      SORT_AND_CATEGORY,
+      [
+        { name: 'key', kind: 'sortKey', required: true },
+        { name: 'category', kind: 'label', required: false },
+      ],
+      [scrap({ createdAt: 1, readState: 'read' }), scrap({ createdAt: 2 })],
+    )
+    expect(outcome).toEqual({
+      ok: true,
+      values: { key: [-1, -2], category: ['Read', 'Unread'] },
+    })
+  })
+
+  it('leaves an optional export out rather than returning it empty', async () => {
+    // Absent must be distinguishable from "every scrap is uncategorised", or
+    // the list cannot tell whether to offer categories at all.
+    const outcome = await runExports(
+      'export function key(item) { return item.createdAt }',
+      [
+        { name: 'key', kind: 'sortKey', required: true },
+        { name: 'category', kind: 'label', required: false },
+      ],
+      [scrap()],
+    )
+    expect(outcome.ok).toBe(true)
+    if (outcome.ok) {
+      expect(outcome.values['key']).toEqual([1000])
+      expect('category' in outcome.values).toBe(false)
+    }
+  })
+
+  it('fails when a required export is missing', async () => {
+    const outcome = await runExports(
+      'export function category() { return "x" }',
+      [{ name: 'key', kind: 'sortKey', required: true }],
+      [scrap()],
+    )
+    expect(outcome.ok).toBe(false)
+    if (!outcome.ok) expect(outcome.message).toContain('does not export')
+  })
+
+  it('accepts null from a category, meaning the scrap belongs to none', async () => {
+    const outcome = await runExports(
+      'export function category() { return null }',
+      [{ name: 'category', kind: 'label', required: true }],
+      [scrap()],
+    )
+    expect(outcome).toEqual({ ok: true, values: { category: [null] } })
+  })
+
+  it('rejects a category that is not a name', async () => {
+    for (const [body, description] of [
+      ['return 5', 'a number'],
+      ['return true', 'a boolean'],
+      ['return {}', 'not a name'],
+      ['return ""', 'an empty name'],
+    ]) {
+      const outcome = await runExports(
+        `export function category() { ${body} }`,
+        [{ name: 'category', kind: 'label', required: true }],
+        [scrap()],
+      )
+      expect(outcome.ok, body).toBe(false)
+      if (!outcome.ok) expect(outcome.message).toContain(description)
+    }
+  })
+
+  it('reports which export failed, not just that something did', async () => {
+    const outcome = await runExports(
+      `export function key() { return 1 }
+       export function category() { throw new Error('bad bucket') }`,
+      [
+        { name: 'key', kind: 'sortKey', required: true },
+        { name: 'category', kind: 'label', required: false },
+      ],
+      [scrap()],
+    )
+    expect(outcome.ok).toBe(false)
+    if (!outcome.ok) {
+      expect(outcome.message).toContain('category()')
+      expect(outcome.message).toContain('bad bucket')
+    }
   })
 })

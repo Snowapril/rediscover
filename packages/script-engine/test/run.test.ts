@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ScriptItem } from '@rediscover/core'
-import { runScript } from '../src/run.ts'
+import { defaultLimitsFor, runScript } from '../src/run.ts'
 
 function scrap(overrides: Partial<ScriptItem> = {}): ScriptItem {
   return {
@@ -182,10 +182,20 @@ describe('runScript', () => {
     expect(outcome).toEqual({ ok: true, values: [] })
   })
 
-  it('handles a large folder within its time budget', async () => {
+  it('handles a large folder on its default budget', async () => {
+    // The budget scales with the folder, so this passes on a slow machine as
+    // well as a fast one. A flat budget tuned on a developer's laptop rejected
+    // this on a CI runner.
     const many = Array.from({ length: 5000 }, (_, index) => scrap({ createdAt: index }))
     const outcome = await runScript('export function key(item) { return -item.createdAt }', KEY, many)
-    expect(outcome.ok).toBe(true)
+    expect(outcome.ok, outcome.ok ? '' : outcome.message).toBe(true)
     if (outcome.ok) expect(outcome.values).toHaveLength(5000)
+  })
+
+  it('grows the budget with the folder', () => {
+    expect(defaultLimitsFor(0).timeoutMs).toBeLessThan(defaultLimitsFor(5000).timeoutMs)
+    // Still tight enough that a runaway script in a small folder is stopped
+    // quickly rather than allowed a large folder's budget.
+    expect(defaultLimitsFor(10).timeoutMs).toBeLessThan(500)
   })
 })

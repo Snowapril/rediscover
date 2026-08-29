@@ -28,14 +28,38 @@ export interface RunLimits {
 }
 
 /*
- * @brief Limits a user script runs under unless told otherwise.
- * @details A tenth of a second is far more than any reasonable key function
- *   needs over a large folder, and stopping there keeps a mistake — an infinite
- *   loop, a runaway recursion — from freezing the list it was meant to order.
+ * @brief Time allowed before the first scrap is even looked at.
+ * @details Covers starting the sandbox, evaluating the script, and handing the
+ *   scraps over.
  */
-export const DEFAULT_LIMITS: RunLimits = {
-  timeoutMs: 200,
-  memoryBytes: 64 * 1024 * 1024,
+const BASE_TIMEOUT_MS = 250
+
+/*
+ * @brief Time allowed per scrap on top of that.
+ * @details Roughly ten times what a key function costs on a slow machine, so a
+ *   legitimate script has room while a runaway one is still stopped.
+ */
+const PER_ITEM_TIMEOUT_MS = 0.5
+
+const DEFAULT_MEMORY_BYTES = 64 * 1024 * 1024
+
+/*
+ * @brief The limits a script runs under unless the caller says otherwise.
+ * @details The budget grows with the folder, because the work legitimately
+ *   does: evaluating a key function five thousand times is five thousand times
+ *   the work of evaluating it once. A flat budget generous enough for a large
+ *   folder would let a runaway script in a small one spin for just as long, and
+ *   a flat budget tight enough for a small folder rejects a perfectly good
+ *   script the moment somebody's folder grows — on a slower machine than the
+ *   one it was tuned on.
+ * @param itemCount How many scraps the script will see.
+ * @return The time and memory it may use.
+ */
+export function defaultLimitsFor(itemCount: number): RunLimits {
+  return {
+    timeoutMs: BASE_TIMEOUT_MS + Math.ceil(itemCount * PER_ITEM_TIMEOUT_MS),
+    memoryBytes: DEFAULT_MEMORY_BYTES,
+  }
 }
 
 let modulePromise: Promise<QuickJSWASMModule> | null = null
@@ -73,7 +97,7 @@ export async function runScript(
   source: string,
   exportName: string,
   items: readonly ScriptItem[],
-  limits: RunLimits = DEFAULT_LIMITS,
+  limits: RunLimits = defaultLimitsFor(items.length),
 ): Promise<ScriptOutcome<unknown>> {
   const quickJS = await loadQuickJS()
   const runtime = quickJS.newRuntime()

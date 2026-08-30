@@ -17,7 +17,12 @@ export default tseslint.config(
   },
   {
     // Build steps that run under Node rather than in a browser or a worker.
-    files: ['**/scripts/**/*.js'],
-    languageOptions: { globals: { console: 'readonly', process: 'readonly' } },
+    files: ['**/scripts/**/*.js', '**/scripts/**/*.mjs'],
+    languageOptions: { globals: { console: 'readonly', process: 'readonly', Buffer: 'readonly' } },
+  },
+  {
+    // Service workers have no window; `self` is their global.
+    files: ['**/public/service-worker.js'],
+    languageOptions: { globals: { self: 'readonly' } },
   },
 )

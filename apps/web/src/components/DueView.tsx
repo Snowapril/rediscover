@@ -1,5 +1,6 @@
 import { describeDue, remindAtFrom, REMINDER_PRESETS } from '@rediscover/core'
 import { useDueReminders, useResolveReminder } from '../data/queries.ts'
+import { PushToggle } from './PushToggle.tsx'
 
 /*
  * @brief The scraps whose moment has come.
@@ -19,6 +20,10 @@ export function DueView() {
       <p className="mt-1 max-w-prose text-sm text-muted">
         Things you asked to be reminded about. Open one, or push it further out.
       </p>
+
+      <div className="mt-3">
+        <PushToggle />
+      </div>
 
       {due.isPending && <p className="mt-6 text-sm text-muted">Loading…</p>}
 

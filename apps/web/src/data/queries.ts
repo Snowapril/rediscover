@@ -15,6 +15,8 @@ import {
   listItemSummaries,
   listItems,
   listScheduledReminders,
+  removePushSubscription,
+  savePushSubscription,
   listAllScripts,
   listScripts,
   listViews,
@@ -220,6 +222,17 @@ export function useDeleteScript() {
 }
 
 const REMINDERS_KEY = ['reminders'] as const
+
+export function useSavePushSubscription() {
+  return useMutation({
+    mutationFn: (input: Parameters<typeof savePushSubscription>[1]) =>
+      savePushSubscription(supabase, input),
+  })
+}
+
+export function useRemovePushSubscription() {
+  return useMutation({ mutationFn: (endpoint: string) => removePushSubscription(supabase, endpoint) })
+}
 
 /*
  * @brief Reminders whose moment has arrived.

@@ -53,6 +53,28 @@ tab to your inbox and reads its title, excerpt and cover from the page as the
 browser has rendered it — which is how it reaches pages behind a login or built by
 script, where a server-side fetch sees nothing.
 
+## Reminder notifications
+
+Optional; the Due list works without them. Generate a key pair and tell both
+halves of the application about it:
+
+```sh
+node scripts/vapid-key.mjs
+# VAPID_PRIVATE_KEY   -> supabase/functions/.env
+# VITE_VAPID_PUBLIC_KEY -> apps/web/.env.local
+```
+
+Then point the scheduler at the function, once per deployment:
+
+```sql
+insert into notifier_settings (functions_url, service_role_key)
+values ('https://<project>.supabase.co/functions/v1', '<service role key>');
+```
+
+A cron job asks the `notify` function every five minutes what has come due.
+Regenerating the key pair invalidates every existing subscription, because a
+browser's subscription is bound to the key that created it.
+
 ## Checks
 
 ```sh

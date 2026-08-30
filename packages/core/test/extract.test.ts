@@ -143,3 +143,62 @@ describe('parseMetadata', () => {
     )
   })
 })
+
+describe('falling back to a picture in the page', () => {
+  it('uses an image from the article when the page declares no cover', () => {
+    const doc = page(`
+      <html><head></head><body><article>
+        <p>Text</p><img src="/media/diagram.png" width="640" height="400">
+      </article></body></html>`)
+    expect(parseMetadata(doc, PAGE_URL).thumbnailUrl).toBe(
+      'https://blog.example.com/media/diagram.png',
+    )
+  })
+
+  it('prefers what the page declares over what it merely contains', () => {
+    const doc = page(`
+      <html><head><meta property="og:image" content="/declared.png"></head>
+      <body><article><img src="/inside.png" width="640"></article></body></html>`)
+    expect(parseMetadata(doc, PAGE_URL).thumbnailUrl).toBe('https://blog.example.com/declared.png')
+  })
+
+  it('skips the furniture', () => {
+    for (const markup of [
+      '<img src="/site-logo.png" width="600">',
+      '<img src="/x.png" alt="Author avatar" width="600">',
+      '<img src="/x.png" class="emoji" width="600">',
+      '<img src="/tracking-pixel.gif" width="600">',
+    ]) {
+      const doc = page(`<html><head></head><body><article>${markup}</article></body></html>`)
+      expect(parseMetadata(doc, PAGE_URL).thumbnailUrl, markup).toBeNull()
+    }
+  })
+
+  it('skips an image that says it is too small to be the subject', () => {
+    const doc = page(
+      '<html><head></head><body><article><img src="/thumb.png" width="48" height="48"></article></body></html>',
+    )
+    expect(parseMetadata(doc, PAGE_URL).thumbnailUrl).toBeNull()
+  })
+
+  it('takes an image that declares no size, since most do not', () => {
+    const doc = page('<html><head></head><body><article><img src="/photo.jpg"></article></body></html>')
+    expect(parseMetadata(doc, PAGE_URL).thumbnailUrl).toBe('https://blog.example.com/photo.jpg')
+  })
+
+  it('ignores an inline data image', () => {
+    const doc = page(
+      '<html><head></head><body><article><img src="data:image/gif;base64,R0lGOD"></article></body></html>',
+    )
+    expect(parseMetadata(doc, PAGE_URL).thumbnailUrl).toBeNull()
+  })
+
+  it('looks only inside the article, not the whole page', () => {
+    const doc = page(`
+      <html><head></head><body>
+        <header><img src="/banner.png" width="900"></header>
+        <article><p>No pictures here.</p></article>
+      </body></html>`)
+    expect(parseMetadata(doc, PAGE_URL).thumbnailUrl).toBeNull()
+  })
+})

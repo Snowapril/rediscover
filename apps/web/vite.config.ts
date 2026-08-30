@@ -11,6 +11,6 @@ export default defineConfig({
   test: {
     // Components are exercised against a synthetic DOM; there is no browser here.
     environment: 'happy-dom',
-    include: ['test/**/*.test.tsx'],
+    include: ['test/**/*.test.{ts,tsx}'],
   },
 })

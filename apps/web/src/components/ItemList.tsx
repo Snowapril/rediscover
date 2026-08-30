@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { DEFAULT_VIEW, settingsOf, type ViewSettings } from '@rediscover/api-client'
+import { useFillPending } from '../data/useFillPending.ts'
 import { useViewItems } from '../data/useViewItems.ts'
 import { CategoryChips } from './CategoryChips.tsx'
 import { ItemRowView } from './ItemRowView.tsx'
@@ -60,6 +61,7 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
 
   const allScripts = [...(sortScripts.data ?? []), ...(groupScripts.data ?? [])]
   const arranged = useViewItems(items.data, settings, allScripts, category)
+  const filling = useFillPending(items.data ?? [], collectionId)
 
   function changeView(patch: Partial<ViewSettings>) {
     if (activeView !== null) {
@@ -190,6 +192,13 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
         selected={category}
         onSelect={setCategory}
       />
+
+      {filling.stopped && (
+        <p className="mt-3 text-sm text-accent">
+          Gave up reading pages after several failures. Check the extractor is running, then
+          reload.
+        </p>
+      )}
 
       {arranged.error !== null && (
         <p className="mt-3 text-sm text-accent">

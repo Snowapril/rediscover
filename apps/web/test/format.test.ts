@@ -16,7 +16,15 @@ describe('savedOn', () => {
     expect(savedOn('2024-11-12T09:00:00Z', NOW, 'en-GB')).toContain('2024')
   })
 
-  it('reads as a date in the reader own convention', () => {
+  it('follows the language the interface is written in, not the reader machine', () => {
+    // Every other string on the row is English. A date in the reader's own
+    // convention beside them reads as something broken, not as a courtesy —
+    // "saved 8월 12일 · 3 min read". This is the line to change when the
+    // interface itself becomes translatable.
+    expect(savedOn('2026-08-12T09:00:00Z', NOW)).toBe('12 Aug')
+  })
+
+  it('can still be formatted for another language, for when it is translated', () => {
     expect(savedOn('2026-08-12T09:00:00Z', NOW, 'ko-KR')).toBe('8월 12일')
     expect(savedOn('2026-08-12T09:00:00Z', NOW, 'en-US')).toBe('Aug 12')
   })

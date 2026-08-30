@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ScriptRow, ViewRow, ViewSettings } from '@rediscover/api-client'
+import type { ScriptRow, ViewLayout, ViewRow, ViewSettings } from '@rediscover/api-client'
 
 interface Props {
   views: ViewRow[]
@@ -15,6 +15,18 @@ interface Props {
 }
 
 const tab = 'rounded-md px-2.5 py-1 text-sm'
+
+/*
+ * @brief The ways a view can draw its scraps, and what each is good for.
+ * @details Named by what they show rather than by their shape, so the choice
+ *   reads as a question about the folder rather than a styling preference.
+ */
+const LAYOUTS: { value: ViewLayout; label: string; title: string }[] = [
+  { value: 'headline', label: 'Titles', title: 'Titles only, for scanning a long backlog' },
+  { value: 'list', label: 'List', title: 'Title, site and reading time' },
+  { value: 'card', label: 'Cards', title: 'With the cover and the opening lines' },
+  { value: 'grid', label: 'Moodboard', title: 'Mostly picture, for folders where the image is the point' },
+]
 const control = 'rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink'
 
 /*
@@ -134,6 +146,21 @@ export function ViewBar(props: Props) {
         >
           {settings.sortDirection === 'asc' ? '↓' : '↑'}
         </button>
+
+        <label className="flex items-center gap-1.5">
+          Show as
+          <select
+            value={settings.layout}
+            onChange={(event) => props.onChange({ layout: event.target.value as ViewLayout })}
+            className={control}
+          >
+            {LAYOUTS.map((option) => (
+              <option key={option.value} value={option.value} title={option.title}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <label className="flex items-center gap-1.5">
           Group

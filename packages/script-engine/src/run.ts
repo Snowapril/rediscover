@@ -128,16 +128,23 @@ export async function runExports(
 
   try {
     runtime.setMemoryLimit(limits.memoryBytes)
-    runtime.setInterruptHandler(shouldInterruptAfterDeadline(Date.now() + limits.timeoutMs))
 
     const context = runtime.newContext()
     try {
       const harness = context.evalCode(HARNESS, 'harness.js')
       if (harness.error !== undefined) {
+        const message = describeError(context.dump(harness.error))
         harness.error.dispose()
-        return { ok: false, message: 'The sandbox failed to start.' }
+        return { ok: false, message: `The sandbox failed to start: ${message}` }
       }
       harness.value.dispose()
+
+      // The clock starts only now. Loading this scaffolding is not the user's
+      // script running, and letting it eat into the budget would both shorten
+      // the time their script actually gets and — when the machine is loaded
+      // enough — blame them for a deadline that expired before their first line
+      // was read.
+      runtime.setInterruptHandler(shouldInterruptAfterDeadline(Date.now() + limits.timeoutMs))
 
       const userModule = context.evalCode(source, 'script.js', { type: 'module' })
       if (userModule.error !== undefined) {

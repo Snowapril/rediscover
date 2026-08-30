@@ -107,16 +107,19 @@ function toRow(scrap: ImportedScrap, userId: string, collectionId: string | null
     note: scrap.note,
     thumbnail_url: scrap.thumbnailUrl,
     is_important: scrap.isImportant,
-    // The export supplied these, so there is nothing to read the page for. They
-    // are recorded as the automatic values, which leaves them free to be
-    // replaced by a later extraction and keeps the user's own edits distinct.
+    // What the export gave, recorded as the automatic values so a later read can
+    // replace them while leaving anything the user edits alone.
     auto_metadata: {
       title: scrap.title,
       excerpt: scrap.excerpt,
       thumbnailUrl: scrap.thumbnailUrl,
     },
-    extract_status: 'ok' as const,
-    extracted_at: new Date().toISOString(),
+    // Pending, not ok. An export carries a title and perhaps a cover; it never
+    // carries the site name, the reading time, the author or the publication
+    // date. Calling the row finished because three fields arrived is what left
+    // an imported library with five columns empty and no way to fill them,
+    // since only a failed extraction offered a retry.
+    extract_status: 'pending' as const,
     ...(scrap.createdAt === null ? {} : { created_at: scrap.createdAt }),
   }
 }

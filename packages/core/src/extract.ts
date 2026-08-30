@@ -152,6 +152,49 @@ function countWords(text: string): number {
 }
 
 /*
+ * @brief Images that are furniture rather than the subject of the page.
+ */
+const DECORATIVE_IMAGE = /icon|avatar|logo|badge|emoji|sprite|profile|gravatar|spacer|pixel|button/i
+
+/*
+ * @brief The smallest an image can be and still stand for the page.
+ */
+const MIN_COVER_PIXELS = 200
+
+/*
+ * @brief A picture from the body of the page, for pages that declare no cover.
+ * @details Personal and technical writing very often sets no og:image, so the
+ *   choice is between showing nothing and looking inside. Only the article body
+ *   is searched, and anything that reads as furniture — an avatar, a logo, a
+ *   tracking pixel — is skipped, along with images that declare themselves too
+ *   small to be the subject. Rendered size is unknowable here, so the declared
+ *   attributes and the name are all there is to go on; a wrong guess shows an
+ *   odd picture, which is recoverable, while being too strict shows none.
+ * @param doc The page.
+ * @return The address of a usable image, or null.
+ */
+function contentImage(doc: Document): string | null {
+  const root = doc.querySelector('article') ?? doc.querySelector('main') ?? doc.body
+  if (root === null) return null
+
+  for (const image of Array.from(root.querySelectorAll('img'))) {
+    const source = clean(image.getAttribute('src'))
+    if (source === null || source.startsWith('data:')) continue
+
+    const described = `${source} ${image.getAttribute('alt') ?? ''} ${image.getAttribute('class') ?? ''}`
+    if (DECORATIVE_IMAGE.test(described)) continue
+
+    const width = Number(image.getAttribute('width'))
+    const height = Number(image.getAttribute('height'))
+    if (Number.isFinite(width) && width > 0 && width < MIN_COVER_PIXELS) continue
+    if (Number.isFinite(height) && height > 0 && height < MIN_COVER_PIXELS) continue
+
+    return source
+  }
+  return null
+}
+
+/*
  * @brief What kind of thing the link points at.
  * @param doc The page.
  * @param url The address it was served from.
@@ -209,7 +252,8 @@ export function parseMetadata(doc: Document, url: string): ExtractedMetadata {
   const thumbnail =
     metaContent(doc, ['og:image', 'og:image:url', 'twitter:image', 'twitter:image:src']) ??
     jsonLdName(jsonLd, 'image') ??
-    clean(doc.querySelector('link[rel="image_src"]')?.getAttribute('href'))
+    clean(doc.querySelector('link[rel="image_src"]')?.getAttribute('href')) ??
+    contentImage(doc)
 
   const iconHref =
     clean(doc.querySelector('link[rel="icon"]')?.getAttribute('href')) ??

@@ -5,6 +5,7 @@ import { CollectionTree } from '../components/CollectionTree.tsx'
 import { FolderMap } from '../components/FolderMap.tsx'
 import { ImportView } from '../components/ImportView.tsx'
 import { ItemList } from '../components/ItemList.tsx'
+import { ScriptsView } from '../components/ScriptsView.tsx'
 import { viewCollectionId, type View } from '../view.ts'
 
 /*
@@ -62,7 +63,9 @@ export function HomePage() {
 
         <main className="min-w-0 flex-1">
           {userId !== undefined &&
-            (current.kind === 'import' ? (
+            (current.kind === 'scripts' ? (
+              <ScriptsView userId={userId} />
+            ) : current.kind === 'import' ? (
               <ImportView userId={userId} onDone={setView} />
             ) : current.kind === 'folders' ? (
               <FolderMap collections={collections.data ?? []} onOpen={setView} />

@@ -11,8 +11,8 @@
 - Let the extension edit tags, not just the folder
 - Upgrade Node to 22.22+ so react-router 8 can be used
 - M1: item detail panel with property editing
-- M2: script editor with live preview and forking
 - M2: let a view save a filter, the last piece of its settings
+- Consider syntax highlighting in the script editor; a textarea does for short scripts
 - Verify the sandbox WebAssembly loads in a real browser, not only in the bundle
 - Import Netscape bookmark HTML, which is what Pocket and browsers export
 - Renumber sibling positions when repeated drops into one gap exhaust precision

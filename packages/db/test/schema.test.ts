@@ -319,6 +319,44 @@ describe('built-in scripts', () => {
     })
   })
 
+  it('leaves a view working when the script it names is deleted', async () => {
+    // on delete set null rather than restrict: losing an ordering should drop a
+    // view back to its default, not make the view impossible to delete or, worse,
+    // take the view with it.
+    const script = await db.pg.query<{ id: string }>(
+      `insert into scripts (user_id, name, kind, source)
+       values ($1, 'Mine', 'sort', 'export function key(){return 0}') returning id`,
+      [alice],
+    )
+    const view = await db.pg.query<{ id: string }>(
+      `insert into views (user_id, collection_id, name, sort_script_id)
+       values ($1, null, 'Uses it', $2) returning id`,
+      [alice, script.rows[0]!.id],
+    )
+
+    await db.pg.query('delete from scripts where id = $1', [script.rows[0]!.id])
+
+    const after = await db.pg.query<{ sort_script_id: string | null }>(
+      'select sort_script_id from views where id = $1',
+      [view.rows[0]!.id],
+    )
+    expect(after.rows).toHaveLength(1)
+    expect(after.rows[0]!.sort_script_id).toBeNull()
+  })
+
+  it('records what a forked script came from', async () => {
+    const original = await db.pg.query<{ id: string }>(
+      `select id from scripts where is_builtin and name = 'Newest first' limit 1`,
+    )
+    const fork = await db.pg.query<{ forked_from: string | null }>(
+      `insert into scripts (user_id, name, kind, source, forked_from)
+       values ($1, 'Newest first (mine)', 'sort', 'export function key(){return 0}', $2)
+       returning forked_from`,
+      [alice, original.rows[0]!.id],
+    )
+    expect(fork.rows[0]!.forked_from).toBe(original.rows[0]!.id)
+  })
+
   it('lets every user read them and no user write them', async () => {
     const readable = await db.asUser(bob, async (pg) => {
       const result = await pg.query<{ name: string }>('select name from scripts where is_builtin')

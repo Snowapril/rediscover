@@ -171,6 +171,70 @@ describe('constraints', () => {
   })
 })
 
+describe('reminders', () => {
+  async function reminderOn(userId: string, itemId: string, remindAt: string) {
+    const result = await db.pg.query<{ id: string }>(
+      `insert into reminders (user_id, item_id, remind_at) values ($1, $2, $3) returning id`,
+      [userId, itemId, remindAt],
+    )
+    return result.rows[0]!.id
+  }
+
+  it('starts scheduled', async () => {
+    const itemId = await insertItem(alice, 'https://example.com/remind-1')
+    const id = await reminderOn(alice, itemId, '2030-01-01T00:00:00Z')
+    const result = await db.pg.query<{ status: string; sent_at: string | null }>(
+      'select status, sent_at from reminders where id = $1',
+      [id],
+    )
+    expect(result.rows[0]).toMatchObject({ status: 'scheduled', sent_at: null })
+  })
+
+  it("refuses a reminder on another user's scrap", async () => {
+    const itemId = await insertItem(alice, 'https://example.com/remind-2')
+    await expect(reminderOn(bob, itemId, '2030-01-01T00:00:00Z')).rejects.toThrow()
+  })
+
+  it('goes when the scrap it is about is deleted for real', async () => {
+    const itemId = await insertItem(alice, 'https://example.com/remind-3')
+    await reminderOn(alice, itemId, '2030-01-01T00:00:00Z')
+    await db.pg.query('delete from items where id = $1', [itemId])
+
+    const left = await db.pg.query<{ count: number }>(
+      'select count(*)::int as count from reminders where item_id = $1',
+      [itemId],
+    )
+    expect(left.rows[0]!.count).toBe(0)
+  })
+
+  it('survives the scrap being trashed, since trashing is reversible', async () => {
+    const itemId = await insertItem(alice, 'https://example.com/remind-4')
+    const id = await reminderOn(alice, itemId, '2030-01-01T00:00:00Z')
+    await db.pg.query('update items set deleted_at = now() where id = $1', [itemId])
+
+    const left = await db.pg.query<{ count: number }>(
+      'select count(*)::int as count from reminders where id = $1',
+      [id],
+    )
+    expect(left.rows[0]!.count).toBe(1)
+  })
+
+  it('finds what is due without any scheduler having run', async () => {
+    // Nothing marks a reminder due; it becomes due as time passes, which is what
+    // lets the inbox be a query rather than a job.
+    const itemId = await insertItem(alice, 'https://example.com/remind-5')
+    await reminderOn(alice, itemId, '2020-01-01T00:00:00Z')
+    await reminderOn(alice, await insertItem(alice, 'https://example.com/remind-6'), '2030-01-01T00:00:00Z')
+
+    const due = await db.pg.query<{ count: number }>(
+      `select count(*)::int as count from reminders
+       where user_id = $1 and status = 'scheduled' and remind_at <= now()`,
+      [alice],
+    )
+    expect(due.rows[0]!.count).toBe(1)
+  })
+})
+
 describe('pinned folders', () => {
   it('starts unpinned and records when it was pinned', async () => {
     const folder = await db.pg.query<{ id: string; pinned_at: string | null }>(

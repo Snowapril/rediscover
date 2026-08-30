@@ -227,6 +227,7 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
                   item={item}
                   collectionId={collectionId}
                   layout={settings.layout}
+                  userId={userId}
                 />
               ))}
             </ul>

@@ -11,6 +11,7 @@ import {
 import { toCollectionInput, type CollectionRow } from '@rediscover/api-client'
 import {
   useCreateCollection,
+  useDueReminders,
   useDeleteCollection,
   useRenameCollection,
   useSetCollectionPinned,
@@ -44,6 +45,7 @@ export function CollectionTree({ userId, collections, view, onSelect }: Props) {
   const renameCollection = useRenameCollection()
   const deleteCollection = useDeleteCollection()
   const setPinned = useSetCollectionPinned()
+  const due = useDueReminders()
 
   const entries = useMemo(() => collections.map(toCollectionInput), [collections])
   const roots = useMemo(() => buildCollectionTree(entries), [entries])
@@ -91,6 +93,21 @@ export function CollectionTree({ userId, collections, view, onSelect }: Props) {
           >
             <span className="w-4 shrink-0" aria-hidden="true" />
             <span className="truncate">Inbox</span>
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => onSelect({ kind: 'due' })}
+            className={`${rowBase} ${view.kind === 'due' ? 'bg-line font-medium' : 'hover:bg-line/60'}`}
+          >
+            <span className="w-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">Due</span>
+            {due.data !== undefined && due.data.length > 0 && (
+              <span className="shrink-0 rounded-full bg-accent px-1.5 text-[0.65rem] font-medium tabular-nums text-canvas">
+                {due.data.length}
+              </span>
+            )}
           </button>
         </li>
         <li>

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import {
+  cancelReminder,
   createCollection,
   createItem,
   createScript,
@@ -10,8 +11,10 @@ import {
   findLiveItemByUrl,
   importScraps,
   listCollections,
+  listDueReminders,
   listItemSummaries,
   listItems,
+  listScheduledReminders,
   listAllScripts,
   listScripts,
   listViews,
@@ -22,6 +25,8 @@ import {
   setImportant,
   setReadState,
   trashItem,
+  resolveReminder,
+  setReminder,
   updateScript,
   updateView,
   createView,
@@ -212,6 +217,56 @@ export function useUpdateScript() {
 
 export function useDeleteScript() {
   return useScriptMutation((id: string) => deleteScript(supabase, id))
+}
+
+const REMINDERS_KEY = ['reminders'] as const
+
+/*
+ * @brief Reminders whose moment has arrived.
+ * @details Refetched on an interval as well as on demand, because a reminder
+ *   becomes due by the clock rather than by anything happening in the app: with
+ *   a tab left open all afternoon, nothing else would ever prompt the check.
+ */
+export function useDueReminders() {
+  return useQuery({
+    queryKey: [...REMINDERS_KEY, 'due'],
+    queryFn: () => listDueReminders(supabase),
+    refetchInterval: 60_000,
+  })
+}
+
+/*
+ * @brief Reminders still waiting, so a scrap can show it is spoken for.
+ */
+export function useScheduledReminders() {
+  return useQuery({
+    queryKey: [...REMINDERS_KEY, 'scheduled'],
+    queryFn: () => listScheduledReminders(supabase),
+  })
+}
+
+function useReminderMutation<TInput>(run: (input: TInput) => Promise<unknown>) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: run,
+    onSuccess: () => client.invalidateQueries({ queryKey: REMINDERS_KEY }),
+  })
+}
+
+export function useSetReminder() {
+  return useReminderMutation((input: { userId: string; itemId: string; remindAt: Date }) =>
+    setReminder(supabase, input),
+  )
+}
+
+export function useCancelReminder() {
+  return useReminderMutation((itemId: string) => cancelReminder(supabase, itemId))
+}
+
+export function useResolveReminder() {
+  return useReminderMutation((input: { id: string; until: Date | null }) =>
+    resolveReminder(supabase, input.id, input.until),
+  )
 }
 
 export function useMergeCollection() {

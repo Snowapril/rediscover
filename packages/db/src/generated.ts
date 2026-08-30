@@ -42,6 +42,7 @@ export type Database = {
           id: string
           name: string
           parent_id: string | null
+          pinned_at: string | null
           position: number
           updated_at: string
           user_id: string
@@ -53,6 +54,7 @@ export type Database = {
           id?: string
           name: string
           parent_id?: string | null
+          pinned_at?: string | null
           position?: number
           updated_at?: string
           user_id: string
@@ -64,6 +66,7 @@ export type Database = {
           id?: string
           name?: string
           parent_id?: string | null
+          pinned_at?: string | null
           position?: number
           updated_at?: string
           user_id?: string

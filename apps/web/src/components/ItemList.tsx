@@ -1,21 +1,17 @@
 import { useState, type FormEvent } from 'react'
-import type { ItemRow } from '@rediscover/api-client'
 import { DEFAULT_VIEW, settingsOf, type ViewSettings } from '@rediscover/api-client'
 import { useViewItems } from '../data/useViewItems.ts'
 import { CategoryChips } from './CategoryChips.tsx'
+import { ItemRowView } from './ItemRowView.tsx'
 import { ViewBar } from './ViewBar.tsx'
 import {
   useCollections,
   useCreateItem,
   useFindExistingItem,
   useItems,
-  useRetryExtraction,
-  useSetImportant,
   useCreateView,
   useDeleteView,
   useScripts,
-  useSetReadState,
-  useTrashItem,
   useUpdateView,
   useViews,
 } from '../data/queries.ts'
@@ -35,27 +31,6 @@ const DUPLICATE_CONSTRAINT = 'items_user_canonical_url_key'
  */
 interface Duplicate {
   collectionId: string | null
-}
-
-/*
- * @brief Elapsed time in the coarsest unit that still says something.
- * @param iso When the scrap was saved.
- * @return A phrase like "3 days ago".
- */
-function savedAgo(iso: string): string {
-  const elapsedMs = Date.now() - new Date(iso).getTime()
-  const format = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
-  const units = [
-    { unit: 'day', ms: 86_400_000 },
-    { unit: 'hour', ms: 3_600_000 },
-    { unit: 'minute', ms: 60_000 },
-  ] as const
-
-  for (const { unit, ms } of units) {
-    const value = Math.floor(elapsedMs / ms)
-    if (value >= 1) return format.format(-value, unit)
-  }
-  return 'just now'
 }
 
 export function ItemList({ userId, collectionId, collectionName, onOpenCollection }: Props) {
@@ -239,113 +214,25 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
                 </span>
               </h2>
             )}
-            <ul className="divide-y divide-line">
+            <ul
+              className={
+                settings.layout === 'grid'
+                  ? 'grid grid-cols-2 gap-3 pt-2 sm:grid-cols-3 lg:grid-cols-4'
+                  : 'divide-y divide-line'
+              }
+            >
               {group.items.map((item) => (
-                <ItemRowView key={item.id} item={item} collectionId={collectionId} />
+                <ItemRowView
+                  key={item.id}
+                  item={item}
+                  collectionId={collectionId}
+                  layout={settings.layout}
+                />
               ))}
             </ul>
           </section>
         ))}
       </div>
     </section>
-  )
-}
-
-function ItemRowView({ item, collectionId }: { item: ItemRow; collectionId: string | null }) {
-  const setReadState = useSetReadState(collectionId)
-  const setImportant = useSetImportant(collectionId)
-  const trashItem = useTrashItem(collectionId)
-  const retry = useRetryExtraction(collectionId)
-  const [thumbnailBroken, setThumbnailBroken] = useState(false)
-
-  const isRead = item.read_state === 'read'
-  // Extraction may not have run, or may have failed, so fall back to the
-  // address rather than showing an empty row.
-  const heading = item.title ?? item.url
-  const showThumbnail = item.thumbnail_url !== null && !thumbnailBroken
-
-  return (
-    <li className="group flex items-start gap-3 py-3">
-      <button
-        type="button"
-        aria-label={isRead ? 'Mark unread' : 'Mark read'}
-        title={isRead ? 'Mark unread' : 'Mark read'}
-        onClick={() => setReadState.mutate({ id: item.id, state: isRead ? 'unread' : 'read' })}
-        className={`mt-1.5 size-4 shrink-0 rounded-full border ${
-          isRead ? 'border-accent bg-accent' : 'border-line-strong'
-        }`}
-      />
-
-      {showThumbnail && (
-        <img
-          src={item.thumbnail_url ?? ''}
-          alt=""
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={() => setThumbnailBroken(true)}
-          className="h-14 w-20 shrink-0 rounded border border-line object-cover"
-        />
-      )}
-
-      <div className="min-w-0 flex-1">
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noreferrer noopener"
-          className={`block truncate text-sm ${isRead ? 'text-muted' : 'font-medium'}`}
-        >
-          {heading}
-        </a>
-
-        {item.excerpt !== null && (
-          <p className="mt-0.5 line-clamp-2 text-xs text-muted">{item.excerpt}</p>
-        )}
-
-        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-          <span>{item.site_name ?? item.domain}</span>
-          {item.reading_time_min !== null && <span>· {item.reading_time_min} min read</span>}
-          <span>· saved {savedAgo(item.created_at)}</span>
-          {item.extract_status === 'pending' && <span>· reading the page…</span>}
-          {item.extract_status === 'failed' && (
-            <>
-              <span className="text-accent" title={item.extract_error ?? undefined}>
-                · could not read this page
-              </span>
-              <button
-                type="button"
-                onClick={() => retry.mutate(item)}
-                disabled={retry.isPending}
-                className="underline underline-offset-2 disabled:opacity-50"
-              >
-                {retry.isPending ? 'Retrying…' : 'Retry'}
-              </button>
-            </>
-          )}
-        </p>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-1">
-        <button
-          type="button"
-          aria-label={item.is_important ? 'Remove flag' : 'Flag as important'}
-          title={item.is_important ? 'Remove flag' : 'Flag as important'}
-          onClick={() => setImportant.mutate({ id: item.id, important: !item.is_important })}
-          className={`rounded px-1.5 py-0.5 text-sm ${
-            item.is_important ? 'text-accent' : 'text-muted opacity-0 group-hover:opacity-100'
-          }`}
-        >
-          ★
-        </button>
-        <button
-          type="button"
-          aria-label="Move to trash"
-          title="Move to trash"
-          onClick={() => trashItem.mutate(item.id)}
-          className="rounded px-1.5 py-0.5 text-sm text-muted opacity-0 hover:text-ink group-hover:opacity-100"
-        >
-          ×
-        </button>
-      </div>
-    </li>
   )
 }

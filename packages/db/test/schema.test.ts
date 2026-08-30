@@ -171,6 +171,51 @@ describe('constraints', () => {
   })
 })
 
+describe('pinned folders', () => {
+  it('starts unpinned and records when it was pinned', async () => {
+    const folder = await db.pg.query<{ id: string; pinned_at: string | null }>(
+      `insert into collections (user_id, name) values ($1, 'Reading') returning id, pinned_at`,
+      [alice],
+    )
+    expect(folder.rows[0]!.pinned_at).toBeNull()
+
+    await db.pg.query('update collections set pinned_at = now() where id = $1', [
+      folder.rows[0]!.id,
+    ])
+    const after = await db.pg.query<{ pinned_at: string | null }>(
+      'select pinned_at from collections where id = $1',
+      [folder.rows[0]!.id],
+    )
+    expect(after.rows[0]!.pinned_at).not.toBeNull()
+  })
+
+  it("does not let one user pin another's folder", async () => {
+    const theirs = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Theirs') returning id`,
+      [alice],
+    )
+    const result = await db.asUser(bob, (pg) =>
+      pg.query('update collections set pinned_at = now() where id = $1', [theirs.rows[0]!.id]),
+    )
+    expect(result.affectedRows).toBe(0)
+  })
+
+  it('unpins with the folder still in place', async () => {
+    const folder = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name, pinned_at) values ($1, 'Pinned', now()) returning id`,
+      [alice],
+    )
+    await db.pg.query('update collections set pinned_at = null where id = $1', [
+      folder.rows[0]!.id,
+    ])
+    const after = await db.pg.query<{ count: number }>(
+      'select count(*)::int as count from collections where id = $1 and pinned_at is null',
+      [folder.rows[0]!.id],
+    )
+    expect(after.rows[0]!.count).toBe(1)
+  })
+})
+
 describe('views', () => {
   it('lets the inbox have views, not only folders', async () => {
     await expect(

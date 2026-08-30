@@ -1,12 +1,20 @@
 import { useMemo, useState } from 'react'
 import {
+  branchesHoldingPinned,
   buildCollectionTree,
+  collectionPath,
   flattenCollectionTree,
   nextPosition,
+  pinnedCollections,
   type CollectionNode,
 } from '@rediscover/core'
 import { toCollectionInput, type CollectionRow } from '@rediscover/api-client'
-import { useCreateCollection, useDeleteCollection, useRenameCollection } from '../data/queries.ts'
+import {
+  useCreateCollection,
+  useDeleteCollection,
+  useRenameCollection,
+  useSetCollectionPinned,
+} from '../data/queries.ts'
 import {
   dropIndicatorClasses,
   useFolderDrag,
@@ -35,10 +43,13 @@ export function CollectionTree({ userId, collections, view, onSelect }: Props) {
   const createCollection = useCreateCollection()
   const renameCollection = useRenameCollection()
   const deleteCollection = useDeleteCollection()
+  const setPinned = useSetCollectionPinned()
 
   const entries = useMemo(() => collections.map(toCollectionInput), [collections])
   const roots = useMemo(() => buildCollectionTree(entries), [entries])
   const rows = useMemo(() => flattenCollectionTree(roots, expanded), [roots, expanded])
+  const pinned = useMemo(() => pinnedCollections(entries), [entries])
+  const holdingPinned = useMemo(() => branchesHoldingPinned(entries), [entries])
 
   const reveal = (parentId: string | null) => {
     if (parentId !== null) setExpanded((current) => new Set(current).add(parentId))
@@ -104,6 +115,41 @@ export function CollectionTree({ userId, collections, view, onSelect }: Props) {
         </li>
       </ul>
 
+      {pinned.length > 0 && (
+        <ul className="space-y-0.5 border-t border-line pt-3">
+          <li className="px-2 pb-1 text-[0.65rem] font-medium uppercase tracking-wide text-muted">
+            Pinned
+          </li>
+          {pinned.map((entry) => {
+            const path = collectionPath(entries, entry.id)
+            return (
+              <li key={entry.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelect({ kind: 'collection', id: entry.id })}
+                  title={path.join(' / ')}
+                  className={`${rowBase} ${
+                    selectedId === entry.id ? 'bg-line font-medium' : 'hover:bg-line/60'
+                  }`}
+                >
+                  <span className="w-4 shrink-0 text-center text-accent" aria-hidden="true">
+                    ◆
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {path.length > 1 && (
+                      // The name alone is ambiguous once a folder is shown
+                      // outside the tree it lives in.
+                      <span className="text-muted">{path.slice(0, -1).join(' / ')} / </span>
+                    )}
+                    {entry.name}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
       <ul className="space-y-0.5 border-t border-line pt-3">
         {rows.map((node) => (
           <CollectionRow
@@ -115,6 +161,14 @@ export function CollectionTree({ userId, collections, view, onSelect }: Props) {
             confirmingDelete={confirmingDelete === node.collection.id}
             dragging={drag.dragId === node.collection.id}
             dropMode={drag.modeFor(node.collection.id)}
+            pinned={node.collection.pinnedAt !== null}
+            holdsPinned={holdingPinned.has(node.collection.id)}
+            onTogglePin={() =>
+              setPinned.mutate({
+                id: node.collection.id,
+                pinned: node.collection.pinnedAt === null,
+              })
+            }
             dragProps={drag.dragProps(node.collection.id, renaming !== node.collection.id)}
             onSelect={() => onSelect({ kind: 'collection', id: node.collection.id })}
             onToggle={() => toggle(node.collection.id)}
@@ -156,6 +210,8 @@ interface RowProps {
   confirmingDelete: boolean
   dragging: boolean
   dropMode: DropMode | null
+  pinned: boolean
+  holdsPinned: boolean
   dragProps: FolderDragHandlers
   onSelect(): void
   onToggle(): void
@@ -165,11 +221,15 @@ interface RowProps {
   onCancelDelete(): void
   onConfirmDelete(): void
   onAddChild(): void
+  onTogglePin(): void
 }
 
 function CollectionRow(props: RowProps) {
   const { node, selected, expanded, renaming, confirmingDelete, dragging, dropMode } = props
   const hasChildren = node.children.length > 0
+  // Once a branch is open its pinned folder shows its own mark, so the branch's
+  // stands in only while it is hiding it.
+  const showsBranchMark = props.holdsPinned && !expanded
 
   return (
     <li style={{ paddingLeft: `${node.depth * 0.85}rem` }}>
@@ -209,9 +269,22 @@ function CollectionRow(props: RowProps) {
             type="button"
             onClick={props.onSelect}
             onDoubleClick={props.onStartRename}
-            className="min-w-0 flex-1 truncate text-left"
+            className="flex min-w-0 flex-1 items-center gap-1 truncate text-left"
           >
-            {node.collection.name}
+            <span className="truncate">{node.collection.name}</span>
+            {props.pinned && (
+              <span className="shrink-0 text-[0.6rem] text-accent" title="Pinned">
+                ◆
+              </span>
+            )}
+            {showsBranchMark && (
+              <span
+                className="shrink-0 text-[0.6rem] text-muted"
+                title="Something inside this folder is pinned"
+              >
+                ◇
+              </span>
+            )}
           </button>
         )}
 
@@ -231,6 +304,12 @@ function CollectionRow(props: RowProps) {
           </span>
         ) : (
           <span className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+            <IconButton
+              label={props.pinned ? 'Unpin this folder' : 'Pin this folder to the top'}
+              onClick={props.onTogglePin}
+            >
+              {props.pinned ? '◆' : '◇'}
+            </IconButton>
             <IconButton label="New subfolder" onClick={props.onAddChild}>
               +
             </IconButton>

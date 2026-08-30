@@ -72,6 +72,13 @@ export function ScriptsView({ userId }: Props) {
   const source = draft ?? selected?.source ?? ''
   const dirty = draft !== null && selected !== null && draft !== selected.source
 
+  // Clearing the draft the moment Save is pressed would fall back to the copy
+  // still in the cache, which is the old one until the write has been read back.
+  // It is dropped once what was saved has actually arrived.
+  useEffect(() => {
+    if (draft !== null && selected !== null && draft === selected.source) setDraft(null)
+  }, [draft, selected])
+
   const previewItems = useItems(previewCollectionId)
   const sample = useMemo(
     () => (previewItems.data ?? []).slice(0, PREVIEW_LIMIT),
@@ -187,10 +194,7 @@ export function ScriptsView({ userId }: Props) {
                     <button
                       type="button"
                       disabled={!dirty}
-                      onClick={() => {
-                        updateScript.mutate({ id: selected.id, patch: { source } })
-                        setDraft(null)
-                      }}
+                      onClick={() => updateScript.mutate({ id: selected.id, patch: { source } })}
                       className="ml-auto rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-canvas disabled:opacity-40"
                     >
                       {dirty ? 'Save' : 'Saved'}

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { javascript } from '@codemirror/lang-javascript'
 import { HighlightStyle, indentUnit, syntaxHighlighting } from '@codemirror/language'
-import { EditorState } from '@codemirror/state'
+import { Annotation, EditorState } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers, placeholder } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 
@@ -54,6 +54,15 @@ const theme = EditorView.theme({
   },
 })
 
+/*
+ * @brief Marks a change this component made rather than one the user typed.
+ * @details Without it the two are indistinguishable: replacing the document
+ *   because a new value arrived looks exactly like typing, so the editor reports
+ *   the caller's own text back as an edit. A caller holding that as an unsaved
+ *   draft then prefers it over the value it just saved.
+ */
+const FromCaller = Annotation.define<boolean>()
+
 interface Props {
   value: string
   readOnly: boolean
@@ -99,7 +108,9 @@ export function ScriptEditor({ value, readOnly, onChange }: Props) {
           placeholder('export function key(item) { … }'),
           theme,
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) notify.current(update.state.doc.toString())
+            if (!update.docChanged) return
+            if (update.transactions.some((transaction) => transaction.annotation(FromCaller))) return
+            notify.current(update.state.doc.toString())
           }),
         ],
       }),
@@ -123,7 +134,10 @@ export function ScriptEditor({ value, readOnly, onChange }: Props) {
     // Only when the value came from somewhere other than typing — switching
     // scripts, or discarding an edit. Replacing the document the user is in the
     // middle of would move their cursor to the end.
-    editor.dispatch({ changes: { from: 0, to: current.length, insert: value } })
+    editor.dispatch({
+      changes: { from: 0, to: current.length, insert: value },
+      annotations: FromCaller.of(true),
+    })
   }, [value])
 
   return <div ref={host} className="mt-3 overflow-hidden" />

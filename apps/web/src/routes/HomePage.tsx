@@ -1,11 +1,16 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useAuth } from '../auth/useAuth.ts'
 import { useCollections } from '../data/queries.ts'
 import { CollectionTree } from '../components/CollectionTree.tsx'
 import { FolderMap } from '../components/FolderMap.tsx'
 import { ImportView } from '../components/ImportView.tsx'
 import { ItemList } from '../components/ItemList.tsx'
-import { ScriptsView } from '../components/ScriptsView.tsx'
+
+// The script editor brings a code editor with it, which is a lot to download for
+// a screen most sessions never open. Split out so only opening it pays for it.
+const ScriptsView = lazy(() =>
+  import('../components/ScriptsView.tsx').then((module) => ({ default: module.ScriptsView })),
+)
 import { viewCollectionId, type View } from '../view.ts'
 
 /*
@@ -64,7 +69,9 @@ export function HomePage() {
         <main className="min-w-0 flex-1">
           {userId !== undefined &&
             (current.kind === 'scripts' ? (
-              <ScriptsView userId={userId} />
+              <Suspense fallback={<p className="px-6 py-8 text-sm text-muted">Loading the editor…</p>}>
+                <ScriptsView userId={userId} />
+              </Suspense>
             ) : current.kind === 'import' ? (
               <ImportView userId={userId} onDone={setView} />
             ) : current.kind === 'folders' ? (

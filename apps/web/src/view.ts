@@ -8,6 +8,7 @@ export type View =
   | { kind: 'inbox' }
   | { kind: 'collection'; id: string }
   | { kind: 'folders' }
+  | { kind: 'due' }
   | { kind: 'import' }
   | { kind: 'scripts' }
 

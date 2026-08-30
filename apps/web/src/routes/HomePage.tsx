@@ -4,6 +4,7 @@ import { useCollections } from '../data/queries.ts'
 import { CollectionTree } from '../components/CollectionTree.tsx'
 import { FolderMap } from '../components/FolderMap.tsx'
 import { ImportView } from '../components/ImportView.tsx'
+import { DueView } from '../components/DueView.tsx'
 import { ItemList } from '../components/ItemList.tsx'
 
 // The script editor brings a code editor with it, which is a lot to download for
@@ -68,7 +69,9 @@ export function HomePage() {
 
         <main className="min-w-0 flex-1">
           {userId !== undefined &&
-            (current.kind === 'scripts' ? (
+            (current.kind === 'due' ? (
+              <DueView />
+            ) : current.kind === 'scripts' ? (
               <Suspense fallback={<p className="px-6 py-8 text-sm text-muted">Loading the editor…</p>}>
                 <ScriptsView userId={userId} />
               </Suspense>

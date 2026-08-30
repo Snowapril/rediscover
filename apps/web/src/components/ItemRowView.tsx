@@ -1,11 +1,21 @@
 import { useState } from 'react'
+import { describeDue, remindAtFrom, REMINDER_PRESETS, type ReminderPreset } from '@rediscover/core'
 import type { ItemRow, ViewLayout } from '@rediscover/api-client'
-import { useRetryExtraction, useSetImportant, useSetReadState, useTrashItem } from '../data/queries.ts'
+import {
+  useCancelReminder,
+  useRetryExtraction,
+  useScheduledReminders,
+  useSetImportant,
+  useSetReadState,
+  useSetReminder,
+  useTrashItem,
+} from '../data/queries.ts'
 
 interface Props {
   item: ItemRow
   collectionId: string | null
   layout: ViewLayout
+  userId: string
 }
 
 /*
@@ -61,6 +71,57 @@ function Thumbnail({ item, className }: { item: ItemRow; className: string }) {
       onError={() => setBroken(true)}
       className={className}
     />
+  )
+}
+
+/*
+ * @brief Sets, changes or clears the reminder on one scrap.
+ * @details A plain select rather than a menu: it opens on a tap, closes when
+ *   something is chosen, and needs no handling of clicks landing outside it.
+ *   It shows the standing reminder when there is one, so the control doubles as
+ *   the place that answers "did I already ask to be reminded about this".
+ * @param item The scrap.
+ * @param userId Owner of the reminder.
+ */
+function ReminderControl({ item, userId }: { item: ItemRow; userId: string }) {
+  const scheduled = useScheduledReminders()
+  const setReminder = useSetReminder()
+  const cancelReminder = useCancelReminder()
+
+  const existing = scheduled.data?.find((reminder) => reminder.item_id === item.id) ?? null
+  const due = existing === null ? null : describeDue(new Date(existing.remind_at).getTime(), Date.now())
+
+  return (
+    <label className={existing === null ? 'opacity-0 group-hover:opacity-100' : ''}>
+      <span className="sr-only">Remind me about this</span>
+      <select
+        value=""
+        onChange={(event) => {
+          const choice = event.target.value
+          if (choice === '') return
+          if (choice === 'clear') {
+            cancelReminder.mutate(item.id)
+            return
+          }
+          setReminder.mutate({
+            userId,
+            itemId: item.id,
+            remindAt: new Date(remindAtFrom(choice as ReminderPreset, Date.now())),
+          })
+        }}
+        className={`max-w-[9rem] rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs ${
+          existing === null ? 'text-muted' : 'border-accent/50 text-accent'
+        }`}
+      >
+        <option value="">{due ?? 'Remind me…'}</option>
+        {REMINDER_PRESETS.map((preset) => (
+          <option key={preset.value} value={preset.value}>
+            {preset.label}
+          </option>
+        ))}
+        {existing !== null && <option value="clear">Never mind</option>}
+      </select>
+    </label>
   )
 }
 
@@ -157,7 +218,7 @@ function ReadDot({ actions, className }: { actions: ReturnType<typeof useItemAct
  * @param collectionId The folder it is listed under, so an edit refreshes it.
  * @param layout How the current view draws its scraps.
  */
-export function ItemRowView({ item, collectionId, layout }: Props) {
+export function ItemRowView({ item, collectionId, layout, userId }: Props) {
   const actions = useItemActions(item, collectionId)
   // Extraction may not have run, or may have failed, so fall back to the
   // address rather than showing an empty row.
@@ -222,6 +283,7 @@ export function ItemRowView({ item, collectionId, layout }: Props) {
         <Meta item={item} retry={actions.retry} />
       </div>
 
+      <ReminderControl item={item} userId={userId} />
       <Actions item={item} actions={actions} floating={false} />
     </li>
   )

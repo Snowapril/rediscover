@@ -108,15 +108,18 @@ describe('runScript', () => {
     expect(Date.now() - started).toBeLessThan(3000)
   })
 
-  it('stops a script that eats memory', async () => {
+  it('stops a script that eats memory, on memory rather than on the clock', async () => {
     const outcome = await runScript(
-      'export function key() { const a = []; while (true) a.push(new Array(1000).fill(1)); }',
+      'export function key() { const a = []; while (true) a.push(new Array(100000).fill(1)); }',
       KEY,
       [scrap()],
-      { timeoutMs: 5000, memoryBytes: 1024 * 1024 },
+      { timeoutMs: 2000, memoryBytes: 1024 * 1024 },
     )
     expect(outcome.ok).toBe(false)
-  })
+    // Asserting which limit fired: allowing the clock to be what stops it would
+    // leave the memory limit untested.
+    if (!outcome.ok) expect(outcome.message).toContain('memory')
+  }, 15_000)
 
   it('has no way to reach the host', async () => {
     const outcome = await runScript(

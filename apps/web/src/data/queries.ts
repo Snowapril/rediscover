@@ -14,6 +14,7 @@ import {
   mergeCollection,
   moveCollection,
   renameCollection,
+  setCollectionPinned,
   setImportant,
   setReadState,
   trashItem,
@@ -173,6 +174,15 @@ export function useMergeCollection() {
       void client.invalidateQueries({ queryKey: ['items'] })
       void client.invalidateQueries({ queryKey: ['item-summaries'] })
     },
+  })
+}
+
+export function useSetCollectionPinned() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; pinned: boolean }) =>
+      setCollectionPinned(supabase, input.id, input.pinned),
+    onSuccess: () => client.invalidateQueries({ queryKey: COLLECTIONS_KEY }),
   })
 }
 

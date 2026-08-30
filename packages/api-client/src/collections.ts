@@ -1,4 +1,4 @@
-import type { CollectionInput } from '@rediscover/core'
+import type { CollectionInput, PinnableCollection } from '@rediscover/core'
 import type { Database } from '@rediscover/db/generated'
 import type { RediscoverClient } from './client.ts'
 import { unwrap, unwrapVoid } from './result.ts'
@@ -10,8 +10,17 @@ export type CollectionRow = Database['public']['Tables']['collections']['Row']
  * @param row A collection as stored.
  * @return The same collection, with the fields buildCollectionTree reads.
  */
-export function toCollectionInput(row: CollectionRow): CollectionInput & { row: CollectionRow } {
-  return { id: row.id, parentId: row.parent_id, name: row.name, position: row.position, row }
+export function toCollectionInput(
+  row: CollectionRow,
+): CollectionInput & PinnableCollection & { row: CollectionRow } {
+  return {
+    id: row.id,
+    parentId: row.parent_id,
+    name: row.name,
+    position: row.position,
+    pinnedAt: row.pinned_at,
+    row,
+  }
 }
 
 /*
@@ -107,6 +116,27 @@ export async function mergeCollection(
     target_id: targetId,
   })
   if (error !== null) throw new Error(error.message, { cause: error })
+}
+
+/*
+ * @brief Pin a folder to the top, or unpin it.
+ * @details The time is what orders the shelf, so pinning something records when
+ *   rather than merely that.
+ * @param client A signed-in client.
+ * @param id The folder to pin or unpin.
+ * @param pinned Whether it should be pinned.
+ */
+export async function setCollectionPinned(
+  client: RediscoverClient,
+  id: string,
+  pinned: boolean,
+): Promise<void> {
+  unwrapVoid(
+    await client
+      .from('collections')
+      .update({ pinned_at: pinned ? new Date().toISOString() : null })
+      .eq('id', id),
+  )
 }
 
 /*

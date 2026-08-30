@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { orderByKeys, type ScriptItem, type SortKey } from '@rediscover/core'
-import { runScript } from '@rediscover/script-engine'
+import { runExports, runScript } from '@rediscover/script-engine'
 import { createTestDb, type TestDb } from '../src/testing.ts'
 
 /*
@@ -179,5 +179,64 @@ describe('what the built-in sorts actually do', () => {
       'old-important',
       'new-read',
     ])
+  })
+})
+
+describe('the categories a sort script names', () => {
+  async function categoriesOf(name: string): Promise<(string | null)[]> {
+    const script = scripts.find((entry) => entry.name === name && entry.kind === 'sort')
+    if (script === undefined) throw new Error(`no built-in sort script called ${name}`)
+    const outcome = await runExports(
+      script.source,
+      [{ name: 'category', kind: 'label', required: true }],
+      SAMPLE,
+    )
+    if (!outcome.ok) throw new Error(outcome.message)
+    return outcome.values['category'] as (string | null)[]
+  }
+
+  it('splits the default sort into what is waiting and what is done', async () => {
+    // SAMPLE is [unread, read, unread] in that order.
+    expect(await categoriesOf('Newest first')).toEqual(['Unread', 'Read', 'Unread'])
+  })
+
+  it('separates the flagged scrap', async () => {
+    expect(await categoriesOf('Important first')).toEqual([
+      'Important',
+      'Everything else',
+      'Everything else',
+    ])
+  })
+
+  it('names a site, falling back to its host when there is no site name', async () => {
+    expect(await categoriesOf('By site')).toEqual(['zeta.example', 'Alpha', 'Alpha'])
+  })
+
+  it('files a title under its first letter, and anything else under #', async () => {
+    // SAMPLE is [no title, 'Beta', 'alpha']; the untitled scrap falls back to
+    // its address, which starts with 'h'.
+    expect(await categoriesOf('By title')).toEqual(['H', 'B', 'A'])
+  })
+
+  it('buckets by length and says so when there is no estimate', async () => {
+    expect(await categoriesOf('Quickest to read')).toEqual([
+      'Over 15 minutes',
+      'Length unknown',
+      'Under 5 minutes',
+    ])
+  })
+
+  it('gives every sort script a category, since the list offers them for all', async () => {
+    for (const script of scripts.filter((entry) => entry.kind === 'sort')) {
+      const outcome = await runExports(
+        script.source,
+        [{ name: 'category', kind: 'label', required: false }],
+        SAMPLE,
+      )
+      expect(outcome.ok, script.name).toBe(true)
+      if (outcome.ok) {
+        expect(Object.keys(outcome.values), `sort script "${script.name}"`).toContain('category')
+      }
+    }
   })
 })

@@ -2,13 +2,17 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 import {
   createCollection,
   createItem,
+  createScript,
   deleteCollection,
+  deleteScript,
   extractIntoItem,
+  forkScript,
   findLiveItemByUrl,
   importScraps,
   listCollections,
   listItemSummaries,
   listItems,
+  listAllScripts,
   listScripts,
   listViews,
   mergeCollection,
@@ -18,6 +22,7 @@ import {
   setImportant,
   setReadState,
   trashItem,
+  updateScript,
   updateView,
   createView,
   deleteView,
@@ -26,6 +31,7 @@ import {
   type ItemRow,
 } from '@rediscover/api-client'
 import type { ImportedScrap, ReadState } from '@rediscover/core'
+import type { ScriptRow } from '@rediscover/api-client'
 import { supabase } from '../supabase.ts'
 
 const COLLECTIONS_KEY = ['collections'] as const
@@ -117,7 +123,7 @@ export function useImportScraps() {
  */
 export function useScripts(kind: 'sort' | 'group') {
   return useQuery({
-    queryKey: ['scripts', kind],
+    queryKey: [...SCRIPTS_KEY, kind],
     queryFn: () => listScripts(supabase, kind),
     staleTime: 5 * 60 * 1000,
   })
@@ -162,6 +168,50 @@ export function useDeleteView(collectionId: string | null) {
     mutationFn: (id: string) => deleteView(supabase, id),
     onSuccess: () => client.invalidateQueries({ queryKey: viewsKey(collectionId) }),
   })
+}
+
+const SCRIPTS_KEY = ['scripts'] as const
+
+/*
+ * @brief Every script the user can read, of either kind.
+ */
+export function useAllScripts() {
+  return useQuery({ queryKey: SCRIPTS_KEY, queryFn: () => listAllScripts(supabase) })
+}
+
+/*
+ * @brief Anything that changes a script invalidates every list of them.
+ * @details The per-kind lists the folder views read from are separate queries,
+ *   and a script written here has to appear in them without a reload.
+ */
+function useScriptMutation<TInput, TResult>(run: (input: TInput) => Promise<TResult>) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: run,
+    onSuccess: () => client.invalidateQueries({ queryKey: ['scripts'] }),
+  })
+}
+
+export function useCreateScript() {
+  return useScriptMutation((input: Parameters<typeof createScript>[1]) =>
+    createScript(supabase, input),
+  )
+}
+
+export function useForkScript() {
+  return useScriptMutation((input: { userId: string; original: ScriptRow }) =>
+    forkScript(supabase, input.userId, input.original),
+  )
+}
+
+export function useUpdateScript() {
+  return useScriptMutation((input: { id: string; patch: { name?: string; source?: string } }) =>
+    updateScript(supabase, input.id, input.patch),
+  )
+}
+
+export function useDeleteScript() {
+  return useScriptMutation((id: string) => deleteScript(supabase, id))
 }
 
 export function useMergeCollection() {

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { describeDue, remindAtFrom, REMINDER_PRESETS, type ReminderPreset } from '@rediscover/core'
 import type { ItemRow, ViewLayout } from '@rediscover/api-client'
+import { savedOn } from '../format.ts'
 import {
   useCancelReminder,
   useRetryExtraction,
@@ -16,27 +17,6 @@ interface Props {
   collectionId: string | null
   layout: ViewLayout
   userId: string
-}
-
-/*
- * @brief Elapsed time in the coarsest unit that still says something.
- * @param iso When the scrap was saved.
- * @return A phrase like "3 days ago".
- */
-export function savedAgo(iso: string): string {
-  const elapsedMs = Date.now() - new Date(iso).getTime()
-  const format = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
-  const units = [
-    { unit: 'day', ms: 86_400_000 },
-    { unit: 'hour', ms: 3_600_000 },
-    { unit: 'minute', ms: 60_000 },
-  ] as const
-
-  for (const { unit, ms } of units) {
-    const value = Math.floor(elapsedMs / ms)
-    if (value >= 1) return format.format(-value, unit)
-  }
-  return 'just now'
 }
 
 /*
@@ -130,7 +110,7 @@ function Meta({ item, retry }: { item: ItemRow; retry: ReturnType<typeof useItem
     <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
       <span>{item.site_name ?? item.domain}</span>
       {item.reading_time_min !== null && <span>· {item.reading_time_min} min read</span>}
-      <span>· saved {savedAgo(item.created_at)}</span>
+      <span>· saved {savedOn(item.created_at)}</span>
       {item.extract_status === 'pending' && <span>· reading the page…</span>}
       {item.extract_status === 'failed' && (
         <>

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { orderByKeys, type SortKey } from '@rediscover/core'
 import { toScriptItem, type ItemRow, type ScriptRow } from '@rediscover/api-client'
 import { runExports, type ExportSpec } from '@rediscover/script-engine'
+import { PropertyReference } from './PropertyReference.tsx'
+import { ScriptEditor } from './ScriptEditor.tsx'
 import {
   useAllScripts,
   useCollections,
@@ -197,27 +199,10 @@ export function ScriptsView({ userId }: Props) {
                 )}
               </div>
 
-              <textarea
+              <ScriptEditor
                 value={source}
                 readOnly={selected.is_builtin}
-                spellCheck={false}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Tab') return
-                  // Without this, Tab leaves the box and indenting is impossible.
-                  event.preventDefault()
-                  const field = event.currentTarget
-                  const { selectionStart, selectionEnd, value } = field
-                  const next = `${value.slice(0, selectionStart)}  ${value.slice(selectionEnd)}`
-                  setDraft(next)
-                  requestAnimationFrame(() => {
-                    field.selectionStart = field.selectionEnd = selectionStart + 2
-                  })
-                }}
-                rows={16}
-                className={`mt-3 w-full rounded-lg border border-line bg-surface p-3 font-mono text-xs leading-relaxed outline-none focus:border-accent ${
-                  selected.is_builtin ? 'text-muted' : ''
-                }`}
+                onChange={setDraft}
               />
 
               <div className="mt-4">
@@ -281,6 +266,18 @@ export function ScriptsView({ userId }: Props) {
             </>
           )}
         </div>
+
+        {selected !== null && (
+          <aside className="shrink-0 lg:w-80">
+            <PropertyReference
+              onInsert={(expression) => {
+                // Appending rather than inserting at the cursor: the editor owns
+                // its selection, and reaching into it from here would fight it.
+                setDraft(`${source}${source.endsWith('\n') ? '' : '\n'}${expression}`)
+              }}
+            />
+          </aside>
+        )}
       </div>
     </section>
   )

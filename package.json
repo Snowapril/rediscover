@@ -19,8 +19,9 @@
     "lint": "eslint .",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
-    "db:reset": "supabase db reset",
-    "db:types": "supabase gen types typescript --local > packages/db/src/generated.ts"
+    "db:reset": "node scripts/db-reset.mjs",
+    "db:types": "supabase gen types typescript --local > packages/db/src/generated.ts",
+    "db:restore": "node scripts/db-restore.mjs"
   },
   "devDependencies": {
     "@types/node": "22.15.3",

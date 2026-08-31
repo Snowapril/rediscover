@@ -152,7 +152,7 @@ export function SearchControls({
                   })
                 }
               >
-                Include what is filed inside
+                Recursive
               </Toggle>
             </Row>
           )}
@@ -211,7 +211,10 @@ export function SearchControls({
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="w-16 shrink-0 text-[0.65rem] font-medium uppercase tracking-wide text-muted">
+      {/* A minimum rather than a fixed width: the rows still line up, but a
+          label longer than the box grows instead of running under the control
+          beside it. */}
+      <span className="min-w-20 shrink-0 text-[0.65rem] font-medium uppercase tracking-wide text-muted">
         {label}
       </span>
       {children}

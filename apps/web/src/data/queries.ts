@@ -40,7 +40,7 @@ import {
   type ImportProgress,
   type ItemRow,
 } from '@rediscover/api-client'
-import type { ImportedScrap, ReadState } from '@rediscover/core'
+import { narrowsAnything, type ImportedScrap, type ReadState, type SearchFilters } from '@rediscover/core'
 import type { ScriptRow } from '@rediscover/api-client'
 import { supabase } from '../supabase.ts'
 
@@ -246,11 +246,11 @@ export function useItemsByIds(ids: readonly string[]) {
  * @details Held briefly so moving away from a result and back does not ask
  *   again, and skipped entirely for a blank query.
  */
-export function useSearchItems(query: string) {
+export function useSearchItems(filters: SearchFilters) {
   return useQuery({
-    queryKey: ['search', query],
-    queryFn: () => searchItems(supabase, query),
-    enabled: query.trim() !== '',
+    queryKey: ['search', filters],
+    queryFn: () => searchItems(supabase, filters),
+    enabled: narrowsAnything(filters),
     staleTime: 30_000,
   })
 }

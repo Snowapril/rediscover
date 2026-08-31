@@ -185,7 +185,22 @@ describe('search', () => {
 
   async function hits(userId: string, query: string): Promise<string[]> {
     return db.asUser(userId, async (pg) => {
-      const result = await pg.query<{ id: string }>('select id from search_items($1, 50)', [query])
+      const result = await pg.query<{ id: string }>(
+        'select id from search_items(query => $1)',
+        [query],
+      )
+      return result.rows.map((row) => row.id)
+    })
+  }
+
+  /*
+   * Runs a search with no words at all, which is the case the filters exist
+   * for: "what is unread in this folder" is a question about where and what,
+   * not about wording.
+   */
+  async function filtered(userId: string, sql: string, params: unknown[]): Promise<string[]> {
+    return db.asUser(userId, async (pg) => {
+      const result = await pg.query<{ id: string }>(`select id from ${sql}`, params)
       return result.rows.map((row) => row.id)
     })
   }
@@ -222,6 +237,130 @@ describe('search', () => {
     const titled = await findable(alice, { title: 'Raytracing explained' })
     const order = await hits(alice, 'raytracing')
     expect(order.indexOf(titled)).toBeLessThan(order.indexOf(buried))
+  })
+
+  it('searches with filters and no words at all', async () => {
+    const flagged = await findable(alice, { title: 'A flagged one' })
+    await db.pg.query('update items set is_important = true where id = $1', [flagged])
+    await findable(alice, { title: 'An ordinary one' })
+
+    const found = await filtered(alice, 'search_items(flagged_only => true)', [])
+    expect(found).toContain(flagged)
+    expect(found).toHaveLength(1)
+  })
+
+  it('narrows to one folder, and to its subfolders only when asked', async () => {
+    const parent = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Parent') returning id`,
+      [alice],
+    )
+    const parentId = parent.rows[0]!.id
+    const child = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, parent_id, name) values ($1, $2, 'Child') returning id`,
+      [alice, parentId],
+    )
+
+    const inParent = await findable(alice, { title: 'Directly in the parent' })
+    const inChild = await findable(alice, { title: 'Filed one level down' })
+    await db.pg.query('update items set collection_id = $1 where id = $2', [parentId, inParent])
+    await db.pg.query('update items set collection_id = $1 where id = $2', [
+      child.rows[0]!.id,
+      inChild,
+    ])
+
+    const shallow = await filtered(
+      alice,
+      `search_items(scope => 'folder', collection => $1)`,
+      [parentId],
+    )
+    expect(shallow).toEqual([inParent])
+
+    const deep = await filtered(
+      alice,
+      `search_items(scope => 'folder', collection => $1, include_subfolders => true)`,
+      [parentId],
+    )
+    expect(deep).toContain(inParent)
+    expect(deep).toContain(inChild)
+  })
+
+  it('narrows to the inbox, which is not the same as anywhere', async () => {
+    const folder = await db.pg.query<{ id: string }>(
+      `insert into collections (user_id, name) values ($1, 'Somewhere') returning id`,
+      [alice],
+    )
+    const filed = await findable(alice, { title: 'Filed away' })
+    await db.pg.query('update items set collection_id = $1 where id = $2', [
+      folder.rows[0]!.id,
+      filed,
+    ])
+    const loose = await findable(alice, { title: 'Never filed' })
+
+    const found = await filtered(alice, `search_items(scope => 'inbox')`, [])
+    expect(found).toContain(loose)
+    expect(found).not.toContain(filed)
+  })
+
+  it('narrows by read state and by kind', async () => {
+    const done = await findable(alice, { title: 'Finished with this' })
+    await db.pg.query(
+      `update items set read_state = 'read', read_at = now(), media_type = 'video' where id = $1`,
+      [done],
+    )
+    await findable(alice, { title: 'Not started' })
+
+    const read = await filtered(alice, `search_items(states => array['read']::read_state[])`, [])
+    expect(read).toEqual([done])
+
+    const videos = await filtered(alice, `search_items(kinds => array['video']::media_type[])`, [])
+    expect(videos).toEqual([done])
+  })
+
+  it('narrows by when a scrap was saved', async () => {
+    const old = await findable(alice, { title: 'Saved a long time ago' })
+    await db.pg.query(`update items set created_at = now() - interval '400 days' where id = $1`, [
+      old,
+    ])
+    const recent = await findable(alice, { title: 'Saved just now' })
+
+    const lately = await filtered(
+      alice,
+      `search_items(saved_after => now() - interval '30 days')`,
+      [],
+    )
+    expect(lately).toContain(recent)
+    expect(lately).not.toContain(old)
+
+    const ancient = await filtered(
+      alice,
+      `search_items(saved_before => now() - interval '365 days')`,
+      [],
+    )
+    expect(ancient).toContain(old)
+    expect(ancient).not.toContain(recent)
+  })
+
+  it('combines words with a filter rather than choosing between them', async () => {
+    const unreadHit = await findable(alice, { title: 'Pipelining in hardware' })
+    const readHit = await findable(alice, { title: 'Pipelining explained' })
+    await db.pg.query(`update items set read_state = 'read', read_at = now() where id = $1`, [
+      readHit,
+    ])
+
+    const found = await filtered(
+      alice,
+      `search_items(query => 'pipelining', states => array['unread']::read_state[])`,
+      [],
+    )
+    expect(found).toContain(unreadHit)
+    expect(found).not.toContain(readHit)
+  })
+
+  it('returns nothing when nothing narrows it', async () => {
+    // Asking for everything is browsing, and the folder views answer that
+    // better than a result list can.
+    await findable(alice, { title: 'Something' })
+    expect(await filtered(alice, 'search_items()', [])).toEqual([])
   })
 
   it('finds nothing for a blank query rather than everything', async () => {

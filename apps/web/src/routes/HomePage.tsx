@@ -72,12 +72,7 @@ export function HomePage() {
         <main className="min-w-0 flex-1">
           {userId !== undefined &&
             (current.kind === 'search' ? (
-              <SearchView
-                userId={userId}
-                onOpenCollection={(id) =>
-                  setView(id === null ? { kind: 'inbox' } : { kind: 'collection', id })
-                }
-              />
+              <SearchView userId={userId} />
             ) : current.kind === 'today' ? (
               <TodayView />
             ) : current.kind === 'due' ? (

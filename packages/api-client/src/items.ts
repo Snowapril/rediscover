@@ -1,8 +1,11 @@
 import {
   canonicalizeUrl,
   extractDomain,
+  narrowsAnything,
+  savedWindow,
   type ReadState,
   type ScriptItem,
+  type SearchFilters,
 } from '@rediscover/core'
 import type { Database } from '@rediscover/db/generated'
 import type { RediscoverClient } from './client.ts'
@@ -242,22 +245,39 @@ export async function listItemsByIds(
 }
 
 /*
- * @brief Find a scrap by what is written on it.
- * @details Matches on title, note, excerpt, site and address, ranked so a word
- *   in a title outweighs the same word in a URL. Runs with the caller's rights,
- *   so it can only ever reach their own library.
+ * @brief Find scraps by what is written on them, by where they sit, or by both.
+ * @details Text is one input among several. A search with no words but a folder
+ *   and a date is a real question — "what did I put in Reading last month" — and
+ *   refusing it because the box was empty would be answering the wrong one.
+ *   Filters that narrow nothing are left off the call entirely rather than sent
+ *   as empty arrays, so the database can tell "any state" from "no states".
  * @param client A signed-in client.
- * @param query What was typed.
+ * @param filters What to look for and where.
  * @param limit How many to return.
- * @return The matches, best first; nothing for a blank query.
+ * @return The matches, best first when words were given and newest first
+ *   otherwise; nothing when the filters narrow nothing.
  */
 export async function searchItems(
   client: RediscoverClient,
-  query: string,
+  filters: SearchFilters,
   limit = 50,
 ): Promise<ItemRow[]> {
-  if (query.trim() === '') return []
-  const { data, error } = await client.rpc('search_items', { query, max_results: limit })
+  if (!narrowsAnything(filters)) return []
+
+  const window = savedWindow(filters.savedWithin, Date.now())
+  const { data, error } = await client.rpc('search_items', {
+    query: filters.text,
+    scope: filters.scope.kind,
+    flagged_only: filters.flaggedOnly,
+    max_results: limit,
+    ...(filters.scope.kind === 'folder'
+      ? { collection: filters.scope.id, include_subfolders: filters.scope.includeSubfolders }
+      : {}),
+    ...(filters.states.length > 0 ? { states: filters.states } : {}),
+    ...(filters.kinds.length > 0 ? { kinds: filters.kinds } : {}),
+    ...(window.after === null ? {} : { saved_after: window.after.toISOString() }),
+    ...(window.before === null ? {} : { saved_before: window.before.toISOString() }),
+  })
   if (error !== null) throw new Error(error.message, { cause: error })
   return data ?? []
 }

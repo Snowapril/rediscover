@@ -558,7 +558,18 @@ export type Database = {
         Returns: undefined
       }
       search_items: {
-        Args: { max_results?: number; query: string }
+        Args: {
+          collection?: string
+          flagged_only?: boolean
+          include_subfolders?: boolean
+          kinds?: Database["public"]["Enums"]["media_type"][]
+          max_results?: number
+          query?: string
+          saved_after?: string
+          saved_before?: string
+          scope?: string
+          states?: Database["public"]["Enums"]["read_state"][]
+        }
         Returns: {
           author: string | null
           auto_metadata: Json

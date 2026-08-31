@@ -782,6 +782,38 @@ describe('built-in scripts', () => {
     expect(fork.rows[0]!.forked_from).toBe(original.rows[0]!.id)
   })
 
+  it('refuses a second copy of a built-in script', async () => {
+    // What the duplicates came from: the seed mints a fresh id on every replay
+    // of the migrations, so a restore carrying the previous copies collided with
+    // nothing and both sets survived. Four cycles put four of everything in the
+    // Sort menu. Identity is per kind and name, so the restore is now skipped.
+    await expect(
+      db.pg.query(
+        `insert into scripts (user_id, name, kind, source, is_builtin)
+         values (null, 'Newest first', 'sort', 'export function key(){return 0}', true)`,
+      ),
+    ).rejects.toThrow()
+  })
+
+  it('leaves a user script free to share a name with a built-in', async () => {
+    // The constraint is about built-ins only; forking one keeps its name, and
+    // two people may each have their own copy.
+    await expect(
+      db.pg.query(
+        `insert into scripts (user_id, name, kind, source)
+         values ($1, 'Newest first', 'sort', 'export function key(){return 0}')`,
+        [alice],
+      ),
+    ).resolves.toBeTruthy()
+    await expect(
+      db.pg.query(
+        `insert into scripts (user_id, name, kind, source)
+         values ($1, 'Newest first', 'sort', 'export function key(){return 0}')`,
+        [bob],
+      ),
+    ).resolves.toBeTruthy()
+  })
+
   it('lets every user read them and no user write them', async () => {
     const readable = await db.asUser(bob, async (pg) => {
       const result = await pg.query<{ name: string }>('select name from scripts where is_builtin')
@@ -957,10 +989,9 @@ describe('row level security', () => {
   })
 
   it('lets every user read built-in scripts but not write them', async () => {
-    await db.pg.query(
-      `insert into scripts (user_id, name, kind, source, is_builtin)
-       values (null, 'Newest first', 'sort', 'export function key(i){return -i.createdAt}', true)`,
-    )
+    // Reads the ones the migrations seeded rather than adding another: there can
+    // only be one built-in per kind and name now, and inserting a second copy is
+    // the very thing that constraint exists to stop.
     const readable = await db.asUser(bob, async (pg) => {
       const result = await pg.query<{ name: string }>('select name from scripts where is_builtin')
       return result.rows.map((row) => row.name)

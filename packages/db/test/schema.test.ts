@@ -171,6 +171,81 @@ describe('constraints', () => {
   })
 })
 
+describe('search', () => {
+  async function findable(userId: string, fields: { title?: string; excerpt?: string; note?: string }) {
+    const result = await db.pg.query<{ id: string }>(
+      `insert into items (user_id, url, canonical_url, domain, title, excerpt, note)
+       values ($1, 'https://example.com/' || gen_random_uuid(), 'https://example.com/' || gen_random_uuid(),
+               'example.com', $2, $3, $4)
+       returning id`,
+      [userId, fields.title ?? null, fields.excerpt ?? null, fields.note ?? null],
+    )
+    return result.rows[0]!.id
+  }
+
+  async function hits(userId: string, query: string): Promise<string[]> {
+    return db.asUser(userId, async (pg) => {
+      const result = await pg.query<{ id: string }>('select id from search_items($1, 50)', [query])
+      return result.rows.map((row) => row.id)
+    })
+  }
+
+  it('finds a word in a title', async () => {
+    const id = await findable(alice, { title: 'Vulkan memory allocation' })
+    expect(await hits(alice, 'vulkan')).toContain(id)
+  })
+
+  it('finds a word only the excerpt has', async () => {
+    const id = await findable(alice, { title: 'Untitled', excerpt: 'about the allocator' })
+    expect(await hits(alice, 'allocator')).toContain(id)
+  })
+
+  it('finds a word only your own note has', async () => {
+    const id = await findable(alice, { title: 'Something', note: 'follow up on pipelining' })
+    expect(await hits(alice, 'pipelining')).toContain(id)
+  })
+
+  it('finds Korean text that carries a particle', async () => {
+    // The case full text search alone gets wrong: 코드 and 코드를 are different
+    // tokens, so only the substring half finds this.
+    const id = await findable(alice, { title: '덜 느린 코드를 작성하는 법' })
+    expect(await hits(alice, '코드')).toContain(id)
+  })
+
+  it('finds a word buried inside a longer one', async () => {
+    const id = await findable(alice, { excerpt: '성능최적화에 대하여' })
+    expect(await hits(alice, '최적화')).toContain(id)
+  })
+
+  it('ranks a title match above the same word in an excerpt', async () => {
+    const buried = await findable(alice, { title: 'Unrelated', excerpt: 'mentions raytracing once' })
+    const titled = await findable(alice, { title: 'Raytracing explained' })
+    const order = await hits(alice, 'raytracing')
+    expect(order.indexOf(titled)).toBeLessThan(order.indexOf(buried))
+  })
+
+  it('finds nothing for a blank query rather than everything', async () => {
+    await findable(alice, { title: 'Anything at all' })
+    expect(await hits(alice, '   ')).toEqual([])
+  })
+
+  it('treats a wildcard character as text, not as a wildcard', async () => {
+    await findable(alice, { title: 'A perfectly ordinary title' })
+    expect(await hits(alice, '%')).toEqual([])
+  })
+
+  it("never reaches another user's library", async () => {
+    const theirs = await findable(alice, { title: 'Alice private raytracing notes' })
+    expect(await hits(bob, 'raytracing')).not.toContain(theirs)
+  })
+
+  it('leaves out a trashed scrap', async () => {
+    const id = await findable(alice, { title: 'Discarded pipelining note' })
+    await db.pg.query('update items set deleted_at = now() where id = $1', [id])
+    expect(await hits(alice, 'pipelining')).not.toContain(id)
+  })
+})
+
 describe('the reminder scheduler', () => {
   it('applies to a Postgres without pg_cron, leaving nothing scheduled', async () => {
     // The point of the guard: a deployment without the extension still gets the

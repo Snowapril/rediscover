@@ -6,6 +6,7 @@
  */
 export type View =
   | { kind: 'today' }
+  | { kind: 'search' }
   | { kind: 'inbox' }
   | { kind: 'collection'; id: string }
   | { kind: 'folders' }

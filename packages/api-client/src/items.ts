@@ -240,3 +240,24 @@ export async function listItemsByIds(
   if (ids.length === 0) return []
   return unwrap(await client.from('items').select('*').in('id', [...ids]))
 }
+
+/*
+ * @brief Find a scrap by what is written on it.
+ * @details Matches on title, note, excerpt, site and address, ranked so a word
+ *   in a title outweighs the same word in a URL. Runs with the caller's rights,
+ *   so it can only ever reach their own library.
+ * @param client A signed-in client.
+ * @param query What was typed.
+ * @param limit How many to return.
+ * @return The matches, best first; nothing for a blank query.
+ */
+export async function searchItems(
+  client: RediscoverClient,
+  query: string,
+  limit = 50,
+): Promise<ItemRow[]> {
+  if (query.trim() === '') return []
+  const { data, error } = await client.rpc('search_items', { query, max_results: limit })
+  if (error !== null) throw new Error(error.message, { cause: error })
+  return data ?? []
+}

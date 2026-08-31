@@ -153,6 +153,8 @@ export type Database = {
           read_at: string | null
           read_state: Database["public"]["Enums"]["read_state"]
           reading_time_min: number | null
+          search_plain: string | null
+          search_text: unknown
           site_name: string | null
           thumbnail_url: string | null
           title: string | null
@@ -184,6 +186,8 @@ export type Database = {
           read_at?: string | null
           read_state?: Database["public"]["Enums"]["read_state"]
           reading_time_min?: number | null
+          search_plain?: string | null
+          search_text?: unknown
           site_name?: string | null
           thumbnail_url?: string | null
           title?: string | null
@@ -215,6 +219,8 @@ export type Database = {
           read_at?: string | null
           read_state?: Database["public"]["Enums"]["read_state"]
           reading_time_min?: number | null
+          search_plain?: string | null
+          search_text?: unknown
           site_name?: string | null
           thumbnail_url?: string | null
           title?: string | null
@@ -238,6 +244,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      notifier_settings: {
+        Row: {
+          functions_url: string
+          id: boolean
+          service_role_key: string
+        }
+        Insert: {
+          functions_url: string
+          id?: boolean
+          service_role_key: string
+        }
+        Update: {
+          functions_url?: string
+          id?: boolean
+          service_role_key?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -533,6 +557,51 @@ export type Database = {
         Args: { source_id: string; target_id: string }
         Returns: undefined
       }
+      search_items: {
+        Args: { max_results?: number; query: string }
+        Returns: {
+          author: string | null
+          auto_metadata: Json
+          canonical_url: string
+          collection_id: string | null
+          created_at: string
+          deleted_at: string | null
+          domain: string
+          edited_fields: string[]
+          excerpt: string | null
+          extract_error: string | null
+          extract_status: Database["public"]["Enums"]["extract_status"]
+          extracted_at: string | null
+          favicon_url: string | null
+          id: string
+          is_important: boolean
+          lang: string | null
+          media_type: Database["public"]["Enums"]["media_type"] | null
+          note: string | null
+          position: number
+          published_at: string | null
+          read_at: string | null
+          read_state: Database["public"]["Enums"]["read_state"]
+          reading_time_min: number | null
+          search_plain: string | null
+          search_text: unknown
+          site_name: string | null
+          thumbnail_url: string | null
+          title: string | null
+          updated_at: string
+          url: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "items"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      send_due_reminders: { Args: never; Returns: undefined }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       extract_status: "pending" | "ok" | "failed"

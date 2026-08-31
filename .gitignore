@@ -11,3 +11,6 @@ coverage/
 
 .DS_Store
 *.log
+
+# Local database copies taken before a reset
+supabase/backups/

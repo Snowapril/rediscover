@@ -17,6 +17,7 @@ import {
   listItemsByIds,
   listReadableItems,
   listScheduledReminders,
+  searchItems,
   removePushSubscription,
   savePushSubscription,
   listAllScripts,
@@ -237,6 +238,20 @@ export function useItemsByIds(ids: readonly string[]) {
     queryKey: ['items-by-id', [...ids].sort()],
     queryFn: () => listItemsByIds(supabase, ids),
     enabled: ids.length > 0,
+  })
+}
+
+/*
+ * @brief Scraps matching what was typed.
+ * @details Held briefly so moving away from a result and back does not ask
+ *   again, and skipped entirely for a blank query.
+ */
+export function useSearchItems(query: string) {
+  return useQuery({
+    queryKey: ['search', query],
+    queryFn: () => searchItems(supabase, query),
+    enabled: query.trim() !== '',
+    staleTime: 30_000,
   })
 }
 

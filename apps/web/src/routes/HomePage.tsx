@@ -5,6 +5,7 @@ import { CollectionTree } from '../components/CollectionTree.tsx'
 import { FolderMap } from '../components/FolderMap.tsx'
 import { ImportView } from '../components/ImportView.tsx'
 import { DueView } from '../components/DueView.tsx'
+import { SearchView } from '../components/SearchView.tsx'
 import { TodayView } from '../components/TodayView.tsx'
 import { ItemList } from '../components/ItemList.tsx'
 
@@ -70,7 +71,14 @@ export function HomePage() {
 
         <main className="min-w-0 flex-1">
           {userId !== undefined &&
-            (current.kind === 'today' ? (
+            (current.kind === 'search' ? (
+              <SearchView
+                userId={userId}
+                onOpenCollection={(id) =>
+                  setView(id === null ? { kind: 'inbox' } : { kind: 'collection', id })
+                }
+              />
+            ) : current.kind === 'today' ? (
               <TodayView />
             ) : current.kind === 'due' ? (
               <DueView />

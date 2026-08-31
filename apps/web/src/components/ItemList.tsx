@@ -1,5 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { DEFAULT_VIEW, settingsOf, type ViewSettings } from '@rediscover/api-client'
+import { filtersWithin, type SearchFilters } from '@rediscover/core'
+import { SearchControls } from './SearchControls.tsx'
+import { SearchResults } from './SearchResults.tsx'
 import { useFillPending } from '../data/useFillPending.ts'
 import { useViewItems } from '../data/useViewItems.ts'
 import { CategoryChips } from './CategoryChips.tsx'
@@ -13,6 +16,7 @@ import {
   useCreateView,
   useDeleteView,
   useScripts,
+  useSearchItems,
   useUpdateView,
   useViews,
 } from '../data/queries.ts'
@@ -51,6 +55,20 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
   const [duplicate, setDuplicate] = useState<Duplicate | null>(null)
   const [chosenViewId, setChosenViewId] = useState<string | null>(null)
   const [category, setCategory] = useState<string | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [filters, setFilters] = useState<SearchFilters>(() => filtersWithin(collectionId))
+
+  // Opening a different folder restarts the search there rather than carrying
+  // the previous folder's scope across, which would silently show results from
+  // somewhere else.
+  const scopedTo = filters.scope.kind === 'folder' ? filters.scope.id : null
+  const scopeMatches = collectionId === null ? filters.scope.kind === 'inbox' : scopedTo === collectionId
+  if (!scopeMatches) {
+    setFilters(filtersWithin(collectionId))
+    setSearching(false)
+  }
+
+  const results = useSearchItems(filters)
 
   // Falling back to the first view rather than remembering one per folder means
   // moving between folders never lands on a view that belongs to another.
@@ -158,6 +176,46 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
         </p>
       )}
 
+      <div className="mt-4 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            const next = !searching
+            setSearching(next)
+            if (!next) setFilters(filtersWithin(collectionId))
+          }}
+          className={`rounded-lg border px-3 py-1.5 text-xs ${
+            searching ? 'border-accent text-accent' : 'border-line text-muted'
+          }`}
+        >
+          {searching ? 'Close search' : 'Search this folder'}
+        </button>
+        {searching && (
+          <span className="text-xs text-muted">
+            {collectionName === 'Inbox' ? 'Searching the inbox' : `Searching ${collectionName}`}
+          </span>
+        )}
+      </div>
+
+      {searching && (
+        <div className="mt-3">
+          <SearchControls
+            filters={filters}
+            onChange={setFilters}
+            showRecursive
+            autoFocus
+            placeholder={`A word from anything in ${collectionName}`}
+          />
+          <SearchResults
+            filters={filters}
+            results={results}
+            userId={userId}
+            emptyHint="Type something, or narrow by status, kind or when you saved it."
+          />
+        </div>
+      )}
+
+      <div className={searching ? 'hidden' : ''}>
       <ViewBar
         views={savedViews}
         activeId={activeView?.id ?? null}
@@ -188,7 +246,7 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
       />
 
       <CategoryChips
-        categories={arranged.categories}
+        categories={searching ? [] : arranged.categories}
         selected={category}
         onSelect={setCategory}
       />
@@ -200,13 +258,15 @@ export function ItemList({ userId, collectionId, collectionName, onOpenCollectio
         </p>
       )}
 
-      {arranged.error !== null && (
+      </div>
+
+      {!searching && arranged.error !== null && (
         <p className="mt-3 text-sm text-accent">
           This view&rsquo;s script did not run: {arranged.error} Showing the scraps unarranged.
         </p>
       )}
 
-      <div className="mt-4">
+      <div className={searching ? 'hidden' : 'mt-4'}>
         {items.isPending && <p className="text-sm text-muted">Loading…</p>}
         {items.isError && (
           <p className="text-sm text-accent">Could not load this folder. {String(items.error)}</p>

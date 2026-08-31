@@ -13,6 +13,18 @@ export const REMINDER_PRESETS: { value: ReminderPreset; label: string }[] = [
   { value: 'month', label: 'In a month' },
 ]
 
+/*
+ * @brief How far out each choice puts a reminder.
+ * @details A table rather than a chain of conditionals, so adding a choice is
+ *   one line and cannot be added to the list without being given a distance.
+ */
+const DAYS_OUT: Record<ReminderPreset, number> = {
+  tomorrow: 1,
+  threeDays: 3,
+  week: 7,
+  month: 30,
+}
+
 const DAY_MS = 86_400_000
 
 /*
@@ -26,8 +38,7 @@ const DAY_MS = 86_400_000
  * @return When it comes due, in milliseconds.
  */
 export function remindAtFrom(preset: ReminderPreset, from: number): number {
-  const days = preset === 'tomorrow' ? 1 : preset === 'threeDays' ? 3 : preset === 'week' ? 7 : 30
-  return from + days * DAY_MS
+  return from + DAYS_OUT[preset] * DAY_MS
 }
 
 /*

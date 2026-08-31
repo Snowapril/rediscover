@@ -171,6 +171,45 @@ describe('constraints', () => {
   })
 })
 
+describe('the reminder scheduler', () => {
+  it('applies to a Postgres without pg_cron, leaving nothing scheduled', async () => {
+    // The point of the guard: a deployment without the extension still gets the
+    // table and the function, and the application is unharmed because the inbox
+    // reads the clock rather than a scheduler. Reaching this assertion at all
+    // means the migration applied here, where pg_cron does not exist.
+    const scheduled = await db.pg.query<{ count: number }>(
+      `select count(*)::int as count from pg_namespace where nspname = 'cron'`,
+    )
+    expect(scheduled.rows[0]!.count).toBe(0)
+
+    const fn = await db.pg.query<{ count: number }>(
+      `select count(*)::int as count from pg_proc where proname = 'send_due_reminders'`,
+    )
+    expect(fn.rows[0]!.count).toBe(1)
+  })
+
+  it('holds the notifier credentials where nothing signed in can read them', async () => {
+    await db.pg.query(
+      `insert into notifier_settings (functions_url, service_role_key)
+       values ('https://example.com/functions/v1', 'a-secret')`,
+    )
+
+    const visible = await db.asUser(alice, async (pg) => {
+      const result = await pg.query('select * from notifier_settings')
+      return result.rows.length
+    })
+    expect(visible).toBe(0)
+  })
+
+  it('keeps only one row of settings, so there is no doubt which is used', async () => {
+    await expect(
+      db.pg.query(
+        `insert into notifier_settings (functions_url, service_role_key) values ('x', 'y')`,
+      ),
+    ).rejects.toThrow()
+  })
+})
+
 describe('reminders', () => {
   async function reminderOn(userId: string, itemId: string, remindAt: string) {
     const result = await db.pg.query<{ id: string }>(

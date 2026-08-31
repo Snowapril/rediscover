@@ -5,6 +5,7 @@ import { CollectionTree } from '../components/CollectionTree.tsx'
 import { FolderMap } from '../components/FolderMap.tsx'
 import { ImportView } from '../components/ImportView.tsx'
 import { DueView } from '../components/DueView.tsx'
+import { TodayView } from '../components/TodayView.tsx'
 import { ItemList } from '../components/ItemList.tsx'
 
 // The script editor brings a code editor with it, which is a lot to download for
@@ -20,7 +21,7 @@ import { viewCollectionId, type View } from '../view.ts'
 export function HomePage() {
   const { session, signOut } = useAuth()
   const collections = useCollections()
-  const [view, setView] = useState<View>({ kind: 'inbox' })
+  const [view, setView] = useState<View>({ kind: 'today' })
 
   const userId = session?.user.id
 
@@ -69,7 +70,9 @@ export function HomePage() {
 
         <main className="min-w-0 flex-1">
           {userId !== undefined &&
-            (current.kind === 'due' ? (
+            (current.kind === 'today' ? (
+              <TodayView />
+            ) : current.kind === 'due' ? (
               <DueView />
             ) : current.kind === 'scripts' ? (
               <Suspense fallback={<p className="px-6 py-8 text-sm text-muted">Loading the editor…</p>}>

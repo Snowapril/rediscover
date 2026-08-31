@@ -14,6 +14,8 @@ import {
   listDueReminders,
   listItemSummaries,
   listItems,
+  listItemsByIds,
+  listReadableItems,
   listScheduledReminders,
   removePushSubscription,
   savePushSubscription,
@@ -221,6 +223,23 @@ export function useDeleteScript() {
   return useScriptMutation((id: string) => deleteScript(supabase, id))
 }
 
+/*
+ * @brief Every scrap reduced to what today's shortlist needs.
+ * @details The shortlist and the counts are computed over the whole library, so
+ *   this deliberately reads all of it — four columns of it.
+ */
+export function useReadableItems() {
+  return useQuery({ queryKey: ['readable'], queryFn: () => listReadableItems(supabase) })
+}
+
+export function useItemsByIds(ids: readonly string[]) {
+  return useQuery({
+    queryKey: ['items-by-id', [...ids].sort()],
+    queryFn: () => listItemsByIds(supabase, ids),
+    enabled: ids.length > 0,
+  })
+}
+
 const REMINDERS_KEY = ['reminders'] as const
 
 export function useSavePushSubscription() {
@@ -379,7 +398,11 @@ export function useSetReadState(collectionId: string | null) {
   return useMutation({
     mutationFn: (input: { id: string; state: ReadState }) =>
       setReadState(supabase, input.id, input.state),
-    onSuccess: () => client.invalidateQueries({ queryKey: itemsKey(collectionId) }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: itemsKey(collectionId) })
+      void client.invalidateQueries({ queryKey: ['readable'] })
+      void client.invalidateQueries({ queryKey: ['items-by-id'] })
+    },
   })
 }
 

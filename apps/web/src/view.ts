@@ -5,6 +5,7 @@
  *   inbox.
  */
 export type View =
+  | { kind: 'today' }
   | { kind: 'inbox' }
   | { kind: 'collection'; id: string }
   | { kind: 'folders' }

@@ -1,5 +1,6 @@
 # TODO
 
+- Remove the one-minute reminder preset once push has been seen working
 - Decide on Apple Developer Program enrollment before wiring Sign in with Apple
 - Create the hosted Supabase project and link it
 - Generate database types into `packages/db` from the linked project

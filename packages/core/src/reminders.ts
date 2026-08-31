@@ -4,15 +4,33 @@
  *   question being answered is "not now, but don't let me forget", and picking a
  *   calendar date is more decision than that deserves.
  */
-export type ReminderPreset = 'tomorrow' | 'threeDays' | 'week' | 'month'
+export type ReminderPreset = 'oneMinute' | 'tomorrow' | 'threeDays' | 'week' | 'month'
 
 export const REMINDER_PRESETS: { value: ReminderPreset; label: string }[] = [
+  // TEMPORARY. The shortest real choice is a day, which makes watching a
+  // notification actually arrive a day-long errand. Remove this and its entry
+  // below once push has been seen working end to end.
+  { value: 'oneMinute', label: 'In 1 minute (test)' },
   { value: 'tomorrow', label: 'Tomorrow' },
   { value: 'threeDays', label: 'In 3 days' },
   { value: 'week', label: 'In a week' },
   { value: 'month', label: 'In a month' },
 ]
 
+/*
+ * @brief How far out each choice puts a reminder, in minutes.
+ * @details Minutes rather than days because the shortest is now under one, and
+ *   a single unit keeps the arithmetic in one place.
+ */
+const MINUTES_OUT: Record<ReminderPreset, number> = {
+  oneMinute: 1,
+  tomorrow: 60 * 24,
+  threeDays: 60 * 24 * 3,
+  week: 60 * 24 * 7,
+  month: 60 * 24 * 30,
+}
+
+const MINUTE_MS = 60_000
 const DAY_MS = 86_400_000
 
 /*
@@ -26,8 +44,7 @@ const DAY_MS = 86_400_000
  * @return When it comes due, in milliseconds.
  */
 export function remindAtFrom(preset: ReminderPreset, from: number): number {
-  const days = preset === 'tomorrow' ? 1 : preset === 'threeDays' ? 3 : preset === 'week' ? 7 : 30
-  return from + days * DAY_MS
+  return from + MINUTES_OUT[preset] * MINUTE_MS
 }
 
 /*

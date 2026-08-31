@@ -6,6 +6,7 @@ const NOON = Date.UTC(2026, 7, 30, 12, 0, 0)
 
 describe('remindAtFrom', () => {
   it('puts each preset the right distance out', () => {
+    expect(remindAtFrom('oneMinute', NOON)).toBe(NOON + 60_000)
     expect(remindAtFrom('tomorrow', NOON)).toBe(NOON + DAY)
     expect(remindAtFrom('threeDays', NOON)).toBe(NOON + 3 * DAY)
     expect(remindAtFrom('week', NOON)).toBe(NOON + 7 * DAY)
@@ -33,6 +34,17 @@ describe('isDue', () => {
   it('is due at its moment and after', () => {
     expect(isDue(NOON, NOON)).toBe(true)
     expect(isDue(NOON - DAY, NOON)).toBe(true)
+  })
+})
+
+describe('the temporary test preset', () => {
+  it('is a minute out, so a notification can be watched arriving', () => {
+    expect(remindAtFrom('oneMinute', NOON) - NOON).toBe(60_000)
+  })
+
+  it('is labelled as a test, so it is not mistaken for a real choice', () => {
+    const preset = REMINDER_PRESETS.find((entry) => entry.value === 'oneMinute')
+    expect(preset?.label).toContain('test')
   })
 })
 

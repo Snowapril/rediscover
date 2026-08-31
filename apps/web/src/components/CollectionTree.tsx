@@ -88,6 +88,16 @@ export function CollectionTree({ userId, collections, view, onSelect }: Props) {
         <li>
           <button
             type="button"
+            onClick={() => onSelect({ kind: 'today' })}
+            className={`${rowBase} ${view.kind === 'today' ? 'bg-line font-medium' : 'hover:bg-line/60'}`}
+          >
+            <span className="w-4 shrink-0" aria-hidden="true" />
+            <span className="truncate font-medium">Today</span>
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
             onClick={() => onSelect({ kind: 'inbox' })}
             className={`${rowBase} ${view.kind === 'inbox' ? 'bg-line font-medium' : 'hover:bg-line/60'}`}
           >

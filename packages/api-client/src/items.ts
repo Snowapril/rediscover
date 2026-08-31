@@ -207,3 +207,36 @@ export function toScriptItem(row: ItemRow, tags: readonly string[] = []): Script
     note: row.note,
   }
 }
+
+/*
+ * @brief Every live scrap, reduced to what the reading shortlist needs.
+ * @details Four columns rather than the whole row: the shortlist and the counts
+ *   are computed over the entire library, and pulling all of it down in full to
+ *   pick three would be a large download for a small answer.
+ * @param client A signed-in client.
+ * @return One row per live scrap.
+ */
+export async function listReadableItems(client: RediscoverClient): Promise<
+  { id: string; created_at: string; read_state: ReadState; is_important: boolean; reading_time_min: number | null }[]
+> {
+  return unwrap(
+    await client
+      .from('items')
+      .select('id, created_at, read_state, is_important, reading_time_min')
+      .is('deleted_at', null),
+  )
+}
+
+/*
+ * @brief The scraps behind a shortlist, in full.
+ * @param client A signed-in client.
+ * @param ids The scraps to fetch.
+ * @return The scraps, in no particular order.
+ */
+export async function listItemsByIds(
+  client: RediscoverClient,
+  ids: readonly string[],
+): Promise<ItemRow[]> {
+  if (ids.length === 0) return []
+  return unwrap(await client.from('items').select('*').in('id', [...ids]))
+}

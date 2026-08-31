@@ -70,10 +70,12 @@ Deno.serve(async (request: Request) => {
     .limit(200)
 
   if (dueError !== null) return json({ error: dueError.message }, 500)
-  if (due === null || due.length === 0) return json({ sent: 0, reminders: 0 }, 200)
 
-  const byUser = new Map<string, typeof due>()
-  for (const reminder of due) {
+  // Deliberately not returning early when nothing is due: the nudges below are
+  // the whole point for somebody who has never set a reminder, and an early
+  // return would mean they never got one.
+  const byUser = new Map<string, NonNullable<typeof due>>()
+  for (const reminder of due ?? []) {
     const list = byUser.get(reminder.user_id)
     if (list === undefined) byUser.set(reminder.user_id, [reminder])
     else list.push(reminder)
@@ -149,6 +151,52 @@ Deno.serve(async (request: Request) => {
     }
   }
 
+  // Anyone who asked to be nudged, has somewhere to send it, and has not been
+  // nudged this week. Separate from the reminders above because a reminder is
+  // something the reader asked for on a particular scrap and this is not.
+  const { data: willing } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('nudge_enabled', true)
+
+  let nudged = 0
+  for (const person of willing ?? []) {
+    const { data: forgotten } = await admin.rpc('claim_nudge', { p_user: person.id })
+    const scrap = (forgotten as { title: string | null; domain: string }[] | null)?.[0]
+    if (scrap === undefined) continue
+
+    const { data: subscriptions } = await admin
+      .from('push_subscriptions')
+      .select('id, endpoint, p256dh, auth')
+      .eq('user_id', person.id)
+
+    for (const subscription of (subscriptions ?? []) as Subscription[]) {
+      try {
+        await send(
+          {
+            endpoint: subscription.endpoint,
+            keys: { p256dh: subscription.p256dh, auth: subscription.auth },
+          },
+          JSON.stringify({
+            title: 'Still waiting to be read',
+            body: scrap.title ?? scrap.domain,
+            url: null,
+            count: 1,
+          }),
+          { vapid, subscriber: SUBSCRIBER, ttl: TTL_SECONDS },
+        )
+        nudged++
+      } catch (cause) {
+        if (isGone(cause)) {
+          await admin.from('push_subscriptions').delete().eq('id', subscription.id)
+          pruned++
+        } else {
+          failures.push(cause instanceof Error ? cause.message : String(cause))
+        }
+      }
+    }
+  }
+
   if (delivered.length > 0) {
     await admin
       .from('reminders')
@@ -159,6 +207,7 @@ Deno.serve(async (request: Request) => {
   return json(
     {
       sent,
+      nudged,
       pruned,
       reminders: delivered.length,
       // Reported rather than swallowed: a run that delivered nothing needs to

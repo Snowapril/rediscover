@@ -11,6 +11,7 @@
 - Let the extension edit tags, not just the folder
 - Upgrade Node to 22.22+ so react-router 8 can be used
 - M1: item detail panel with property editing
+- Let the nudge cadence be chosen rather than fixed at a week
 - M2: let a view save a filter, the last piece of its settings
 - Verify the sandbox WebAssembly loads in a real browser, not only in the bundle
 - Import Netscape bookmark HTML, which is what Pocket and browsers export

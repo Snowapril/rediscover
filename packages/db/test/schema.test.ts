@@ -385,6 +385,114 @@ describe('search', () => {
   })
 })
 
+describe('nudging about forgotten scraps', () => {
+  /*
+   * A person of their own for each test. What gets nudged depends on everything
+   * that person owns, and the suite shares one database, so tests that reused an
+   * account would be asserting about scraps a previous test happened to leave
+   * behind.
+   */
+  let next = 0
+  async function someone(wantsNudges = true): Promise<string> {
+    next++
+    const id = await db.createUser(`nudge-${next}@example.com`)
+    await db.pg.query('update profiles set nudge_enabled = $2 where id = $1', [id, wantsNudges])
+    return id
+  }
+
+  async function forgotten(userId: string, title: string, ageDays: number) {
+    const id = await insertItem(userId, `https://example.com/${title.replace(/\s/g, '-')}-${ageDays}`)
+    await db.pg.query(
+      `update items set title = $2, created_at = now() - ($3 || ' days')::interval where id = $1`,
+      [id, title, String(ageDays)],
+    )
+    return id
+  }
+
+  async function nudge(userId: string): Promise<string | null> {
+    const result = await db.pg.query<{ id: string }>('select id from claim_nudge($1)', [userId])
+    return result.rows[0]?.id ?? null
+  }
+
+  it('says nothing to somebody who has not asked', async () => {
+    const person = await someone(false)
+    await forgotten(person, 'Ancient', 400)
+    expect(await nudge(person)).toBeNull()
+  })
+
+  it('raises the scrap that has waited longest', async () => {
+    const person = await someone()
+    await forgotten(person, 'Recent enough', 40)
+    const oldest = await forgotten(person, 'Truly ancient', 400)
+    expect(await nudge(person)).toBe(oldest)
+  })
+
+  it('leaves alone what is not old enough to have been forgotten', async () => {
+    const person = await someone()
+    await forgotten(person, 'Saved this week', 3)
+    expect(await nudge(person)).toBeNull()
+  })
+
+  it('leaves alone what has been read', async () => {
+    const person = await someone()
+    const done = await forgotten(person, 'Read long ago', 400)
+    await db.pg.query(`update items set read_state = 'read', read_at = now() where id = $1`, [done])
+    expect(await nudge(person)).toBeNull()
+  })
+
+  it('nudges once and then holds off for a week', async () => {
+    // The property the whole design rests on: a backlog of hundreds must not
+    // become hundreds of notifications.
+    const person = await someone()
+    for (let index = 0; index < 5; index++) await forgotten(person, `Old ${index}`, 400 + index)
+
+    expect(await nudge(person)).not.toBeNull()
+    expect(await nudge(person)).toBeNull()
+    expect(await nudge(person)).toBeNull()
+  })
+
+  it('moves on to a different scrap next week', async () => {
+    const person = await someone()
+    const first = await forgotten(person, 'First up', 500)
+    await forgotten(person, 'Second up', 400)
+
+    const one = await nudge(person)
+    expect(one).toBe(first)
+
+    await db.pg.query(`update profiles set last_nudged_at = now() - interval '8 days' where id = $1`, [
+      person,
+    ])
+    const two = await nudge(person)
+    expect(two).not.toBe(one)
+  })
+
+  it('will not come back to the same scrap for a long time', async () => {
+    const person = await someone()
+    const only = await forgotten(person, 'The only one', 400)
+
+    expect(await nudge(person)).toBe(only)
+    await db.pg.query(`update profiles set last_nudged_at = now() - interval '8 days' where id = $1`, [
+      person,
+    ])
+    expect(await nudge(person)).toBeNull()
+  })
+
+  it("never reaches into another person's library", async () => {
+    const owner = await someone()
+    const other = await someone()
+    await forgotten(owner, 'Someone else forgot this', 400)
+    expect(await nudge(other)).toBeNull()
+  })
+
+  it('is not something a signed-in person can run for themselves', async () => {
+    // It marks scraps as raised and moves the weekly clock, so it belongs to
+    // the sender rather than to anyone holding a session.
+    await expect(
+      db.asUser(alice, (pg) => pg.query('select id from claim_nudge($1)', [alice])),
+    ).rejects.toThrow()
+  })
+})
+
 describe('the reminder scheduler', () => {
   it('applies to a Postgres without pg_cron, leaving nothing scheduled', async () => {
     // The point of the guard: a deployment without the extension still gets the

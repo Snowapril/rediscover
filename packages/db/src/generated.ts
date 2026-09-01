@@ -148,6 +148,7 @@ export type Database = {
           lang: string | null
           media_type: Database["public"]["Enums"]["media_type"] | null
           note: string | null
+          nudged_at: string | null
           position: number
           published_at: string | null
           read_at: string | null
@@ -181,6 +182,7 @@ export type Database = {
           lang?: string | null
           media_type?: Database["public"]["Enums"]["media_type"] | null
           note?: string | null
+          nudged_at?: string | null
           position?: number
           published_at?: string | null
           read_at?: string | null
@@ -214,6 +216,7 @@ export type Database = {
           lang?: string | null
           media_type?: Database["public"]["Enums"]["media_type"] | null
           note?: string | null
+          nudged_at?: string | null
           position?: number
           published_at?: string | null
           read_at?: string | null
@@ -270,6 +273,8 @@ export type Database = {
           default_sort_script_id: string | null
           display_name: string | null
           id: string
+          last_nudged_at: string | null
+          nudge_enabled: boolean
           updated_at: string
         }
         Insert: {
@@ -278,6 +283,8 @@ export type Database = {
           default_sort_script_id?: string | null
           display_name?: string | null
           id: string
+          last_nudged_at?: string | null
+          nudge_enabled?: boolean
           updated_at?: string
         }
         Update: {
@@ -286,6 +293,8 @@ export type Database = {
           default_sort_script_id?: string | null
           display_name?: string | null
           id?: string
+          last_nudged_at?: string | null
+          nudge_enabled?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -543,6 +552,49 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_nudge: {
+        Args: { cooldown?: string; p_user: string; stale_after?: string }
+        Returns: {
+          author: string | null
+          auto_metadata: Json
+          canonical_url: string
+          collection_id: string | null
+          created_at: string
+          deleted_at: string | null
+          domain: string
+          edited_fields: string[]
+          excerpt: string | null
+          extract_error: string | null
+          extract_status: Database["public"]["Enums"]["extract_status"]
+          extracted_at: string | null
+          favicon_url: string | null
+          id: string
+          is_important: boolean
+          lang: string | null
+          media_type: Database["public"]["Enums"]["media_type"] | null
+          note: string | null
+          nudged_at: string | null
+          position: number
+          published_at: string | null
+          read_at: string | null
+          read_state: Database["public"]["Enums"]["read_state"]
+          reading_time_min: number | null
+          search_plain: string | null
+          search_text: unknown
+          site_name: string | null
+          thumbnail_url: string | null
+          title: string | null
+          updated_at: string
+          url: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "items"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       claim_push_subscription: {
         Args: {
           p_auth: string
@@ -589,6 +641,7 @@ export type Database = {
           lang: string | null
           media_type: Database["public"]["Enums"]["media_type"] | null
           note: string | null
+          nudged_at: string | null
           position: number
           published_at: string | null
           read_at: string | null

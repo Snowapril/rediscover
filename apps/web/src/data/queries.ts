@@ -17,7 +17,9 @@ import {
   listItemsByIds,
   listReadableItems,
   listScheduledReminders,
+  nudgesEnabled,
   searchItems,
+  setNudgesEnabled,
   removePushSubscription,
   savePushSubscription,
   listAllScripts,
@@ -252,6 +254,21 @@ export function useSearchItems(filters: SearchFilters) {
     queryFn: () => searchItems(supabase, filters),
     enabled: narrowsAnything(filters),
     staleTime: 30_000,
+  })
+}
+
+/*
+ * @brief Whether nudges about forgotten scraps are on.
+ */
+export function useNudgesEnabled() {
+  return useQuery({ queryKey: ['nudges'], queryFn: () => nudgesEnabled(supabase) })
+}
+
+export function useSetNudgesEnabled() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (enabled: boolean) => setNudgesEnabled(supabase, enabled),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['nudges'] }),
   })
 }
 

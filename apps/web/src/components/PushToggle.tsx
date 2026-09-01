@@ -5,7 +5,12 @@ import {
   registerForPush,
   unregisterFromPush,
 } from '../push.ts'
-import { useRemovePushSubscription, useSavePushSubscription } from '../data/queries.ts'
+import {
+  useNudgesEnabled,
+  useRemovePushSubscription,
+  useSavePushSubscription,
+  useSetNudgesEnabled,
+} from '../data/queries.ts'
 
 const PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
 
@@ -23,6 +28,8 @@ export function PushToggle() {
 
   const save = useSavePushSubscription()
   const remove = useRemovePushSubscription()
+  const nudges = useNudgesEnabled()
+  const setNudges = useSetNudgesEnabled()
 
   useEffect(() => {
     void currentRegistration().then((registration) => setRegistered(registration !== null))
@@ -91,6 +98,18 @@ export function PushToggle() {
         <span className="text-xs text-accent">
           This browser refused. Allow notifications for the site in its settings, then try again.
         </span>
+      )}
+
+      {registered === true && (
+        <label className="flex items-center gap-1.5 text-xs text-muted">
+          <input
+            type="checkbox"
+            checked={nudges.data === true}
+            onChange={(event) => setNudges.mutate(event.target.checked)}
+            className="accent-accent"
+          />
+          Once a week, remind me of something I forgot
+        </label>
       )}
     </div>
   )
